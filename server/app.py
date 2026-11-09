@@ -586,9 +586,9 @@ def open_project_output(project_id: str, request: Request):
     p = projects.get(project_id)
     if not p:
         raise HTTPException(404, "project not found")
-    output = p.export_output_dir
-    if output is None or not output.is_dir():
-        raise HTTPException(409, "Hasil belum tersedia di folder Save As")
+    output = p.export_output_dir if p.export_output_dir and p.export_output_dir.is_dir() else p.dir
+    if not output.is_dir():
+        raise HTTPException(409, "Folder hasil belum tersedia")
     if os.name != "nt":
         raise HTTPException(501, "Buka folder hanya tersedia di Windows")
     try:

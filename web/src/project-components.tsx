@@ -45,6 +45,7 @@ type ResultsProps = {
 function ClipResult({ project, clip, onPreview, onRetry, onRefresh }: ResultsProps & { clip: Clip }) {
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState("");
+  const [openingFolder, setOpeningFolder] = useState(false);
   const running = !["done", "error", "cancelled"].includes(project.status);
   const errorText = clip.error?.includes("name 'film' is not defined") ? "Kesalahan pembacaan rasio video" : clip.error;
   const onEnter = (event: MouseEvent<HTMLElement>) => {
@@ -64,19 +65,30 @@ function ClipResult({ project, clip, onPreview, onRetry, onRefresh }: ResultsPro
     try { await onRetry(project.id, clip.n); onRefresh(); }
     catch (error) { setRetryError(error instanceof Error ? error.message : String(error)); setRetrying(false); }
   };
+  const openFolder = async () => {
+    setOpeningFolder(true);
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/output/open`, { method: "POST" });
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? `status ${response.status}`);
+    } catch (error) {
+      setRetryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpeningFolder(false);
+    }
+  };
   return <li className={clip.status === "error" ? "has-error" : ""}>
     <span className="n">{String(clip.n).padStart(2, "0")}</span>
     {clip.video ? <button type="button" className="t link-title" title={`preview · ${clip.title}`} onClick={() => onPreview(project, clip)} {...titleProps}>{text}</button> : <span className="t" title={clip.title} {...titleProps}>{text}</span>}
     {clip.status === "error" && !running && project.status !== "cancelled" && <button type="button" className="text-button warn" title={clip.error ?? ""} disabled={retrying} onClick={retry}>{retrying ? "retrying…" : "retry"}</button>}
+    {clip.status !== "error" && clip.video && <button type="button" className="clip-open-folder" aria-label={`Buka folder clip ${clip.n}`} title="Buka folder clip" disabled={openingFolder} onClick={openFolder}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 14 14 6M8 6h6v6" /></svg></button>}
+    {clip.status !== "error" && !clip.video && project.status !== "cancelled" && <span className="clip-status-icon" role="status" aria-label="Sedang memproses clip"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /></svg></span>}
     {clip.status === "error" && <span className="clip-error" role="status">{retryError || errorText || "Klip gagal diproses"}</span>}
   </li>;
 }
 
-/** Only completed deliverables (and actionable errors) belong in the result list. */
+/** Keep every planned clip visible; its right-side icon communicates the current state. */
 export function ClipResults(props: ResultsProps) {
-  return <>{props.project.clips
-    .filter((clip) => !!clip.video || clip.status === "error")
-    .map((clip) => <ClipResult key={clip.n} {...props} clip={clip} />)}</>;
+  return <>{props.project.clips.map((clip) => <ClipResult key={clip.n} {...props} clip={clip} />)}</>;
 }
 
 // Islands mount into existing elements, preserving CSS selectors and semantics.

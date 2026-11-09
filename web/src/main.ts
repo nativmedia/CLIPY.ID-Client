@@ -1388,21 +1388,6 @@ function projectCard(p: Project): HTMLLIElement {
   const heading = el("button", { type: "button", className: "project-title", textContent: p.title || p.url, title: "open in editor" });
   cover.addEventListener("click", () => openEditor(p.id));
   heading.addEventListener("click", () => openEditor(p.id));
-  const openOutput = el("button", { type: "button", className: "text-button project-open-output", textContent: "Buka", hidden: !p.has_export_dir });
-  openOutput.disabled = !p.export_ready;
-  openOutput.title = p.export_ready ? "Buka folder hasil" : "Folder hasil disiapkan setelah proses selesai";
-  openOutput.addEventListener("click", async () => {
-    openOutput.disabled = true;
-    try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(p.id)}/output/open`, { method: "POST" });
-      if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? `status ${response.status}`);
-    } catch (error) {
-      openOutput.title = error instanceof Error ? error.message : String(error);
-    } finally {
-      openOutput.disabled = !p.export_ready;
-    }
-  });
-  const headingRow = el("div", { className: "project-title-row" }, heading, openOutput);
 
   const removable = p.status === "cancelled" || p.status === "error";
   const control = el("button", { type: "button", className: "text-button project-control", textContent: removable ? "hapus" : p.status === "stopping" ? "menghentikan…" : "stop" });
@@ -1455,8 +1440,8 @@ function projectCard(p: Project): HTMLLIElement {
     { className: "project" },
     control,
     cover,
-    el("div", {}, el("h3", {}, headingRow), status, restartable && restart, meta),
-    p.clips.some((clip) => !!clip.video || clip.status === "error") && mountClipResults({ project: p, onPreview: openPreview, onRetry: retryClip, onRefresh: () => { void refreshProjects(); } }),
+    el("div", {}, el("h3", {}, heading), status, restartable && restart, meta),
+    p.clips.length > 0 && mountClipResults({ project: p, onPreview: openPreview, onRetry: retryClip, onRefresh: () => { void refreshProjects(); } }),
     filmConcatControls(p),
   );
 }
