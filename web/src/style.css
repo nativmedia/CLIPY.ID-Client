@@ -1055,6 +1055,10 @@ body.locked { overflow: hidden; }
 .clip-body .reason { margin: 8px 0 0; font-size: 12px; line-height: 1.6; color: var(--fg-2); }
 .clip-actions { display: flex; flex-wrap: wrap; gap: 18px; margin: 14px 0 0; }
 .clip-actions .text-button { font-size: 12px; }
+.sequence-title { margin-top: 10px; }
+.sequence-title .save-status:empty, .sequence-cover-status:empty { display: none; }
+.sequence-actions { justify-content: space-between; }
+.sequence-actions button { margin-left: auto; }
 
 .posts { margin-top: 20px; }
 .tabs { display: flex; flex-wrap: wrap; gap: 0 10px; margin-top: 8px; border-bottom: 1px solid var(--line); }

@@ -212,6 +212,8 @@ Penggabungan memakai FFmpeg stream copy agar tidak merender ulang. Jika ada clip
 
 Pada **Project Dashboard**, setiap proyek memiliki satu baris video tersendiri. Gunakan tombol panah kiri dan kanan pada baris untuk melihat clip lain dan video gabungannya. Pada layar lebar, hingga lima video terlihat sekaligus.
 
+Pada kartu **video gabungan**, judul dapat diubah lalu diterapkan sebagai thumbnail dengan tombol **apply**. Tombol **download** tetap dapat digunakan tanpa apply. Setelah thumbnail diterapkan, video yang diunduh menyertakan gambar sampul tanpa mengubah isi video dan audio; tautan **download thumbnail** juga tersedia jika ingin mengunggah gambarnya secara terpisah. Tampilan sampul yang tertanam dapat berbeda antara pemutar atau platform.
+
 Setiap clip memiliki deskripsi pendek, sedang, dan panjang yang dapat diedit dan disalin. Pembuatan awal memakai API key AI Anda dan dapat memerlukan waktu serta biaya sesuai penyedia. Video gabungan yang sudah dibuat juga tampil di dashboard beserta usulan judul dan deskripsinya. Teks baru tersimpan di proyek; deskripsi lama tidak dihapus.
 
 Pada thumbnail yang dibuat berikutnya, pilihan teks otomatis menggunakan judul clip yang sama. Thumbnail lama tetap seperti semula sampai clip dibuat ulang; pilihan judul manual dan tanpa judul tetap tersedia.

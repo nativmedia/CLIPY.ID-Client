@@ -37,6 +37,12 @@ class DashboardApiTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertTrue(response.headers["content-disposition"].startswith("inline"))
                 self.assertEqual(response.content, b"test-video-data")
+                self.assertEqual(client.get("/api/projects/test/film-sequence/download").content, b"test-video-data")
+                with patch.object(app.sequence_cover, "start", return_value={"status": "running"}) as start:
+                    response = client.post("/api/projects/test/film-sequence/cover", json={"title": "Judul pilihan"})
+                    self.assertEqual(response.status_code, 200)
+                    start.assert_called_once_with(project, "Judul pilihan")
+                self.assertEqual(client.post("/api/projects/test/film-sequence/cover", json={"title": ""}).status_code, 422)
 
 
 if __name__ == "__main__":

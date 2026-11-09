@@ -189,31 +189,22 @@ function postsPanel(projectId: string, n: string, values: DashboardText): HTMLEl
   const body = el("div", { className: "post-fields" });
   const status = el("span", { className: "save-status" });
   status.setAttribute("role", "status");
+  const copyButton = el("button", { type: "button", className: "text-button", textContent: "copy" });
+  let currentArea: HTMLTextAreaElement | null = null;
+  copyButton.addEventListener("click", () => { if (currentArea) void copy(currentArea.value, copyButton); });
   const show = (length: LengthName) => {
     tabs.querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.length === length)));
     const area = el("textarea", {
       value: values[length] ?? "", maxLength: { pendek: 70, sedang: 250, panjang: 600 }[length], spellcheck: true, rows: length === "pendek" ? 3 : 5,
     });
     area.setAttribute("aria-label", `Deskripsi ${length}`);
-    const copyButton = el("button", { type: "button", className: "text-button", textContent: "copy" });
-    copyButton.addEventListener("click", () => copy(area.value, copyButton));
+    currentArea = area;
     area.addEventListener("input", () => {
       values[length] = area.value;
       queueSave(projectId, n, length, area.value, status);
     });
-    body.replaceChildren(el("div", { className: "post-field" },
-      el("div", { className: "field-head" }, copyButton),
-      area,
-    ));
+    body.replaceChildren(el("div", { className: "post-field" }, area));
   };
-  if (n === "sequence") {
-    const input = el("input", { value: values.title ?? "", maxLength: 120 });
-    input.setAttribute("aria-label", "Judul video gabungan");
-    const titleCopy = el("button", { type: "button", className: "text-button", textContent: "copy" });
-    titleCopy.addEventListener("click", () => copy(input.value, titleCopy));
-    input.addEventListener("input", () => { values.title = input.value; queueSave(projectId, n, "title", input.value, status); });
-    box.append(el("div", { className: "post-field" }, el("div", { className: "field-head" }, el("span", { textContent: "judul" }), titleCopy), input));
-  }
   for (const length of ["pendek", "sedang", "panjang"] as const) {
     const b = el("button", { type: "button", textContent: length });
     b.dataset.length = length;
@@ -221,7 +212,7 @@ function postsPanel(projectId: string, n: string, values: DashboardText): HTMLEl
     b.addEventListener("click", () => show(length));
     tabs.append(b);
   }
-  box.append(tabs, body, status);
+  box.append(el("div", { className: "field-head" }, el("span", { textContent: "deskripsi" }), copyButton), tabs, body, status);
   show("sedang");
   return box;
 }
@@ -297,6 +288,13 @@ async function loadDashboardTexts(id: string, scope: HTMLElement, routeId: strin
     scope.querySelectorAll<HTMLElement>("[data-text-id]").forEach((slot) => {
       const textId = slot.dataset.textId!;
       if (data[textId] && slot.dataset.loaded !== "true") {
+        if (textId === "sequence") {
+          const input = slot.closest(".clip-body")?.querySelector<HTMLInputElement>("[data-sequence-title]");
+          if (input && input.dataset.edited !== "true") {
+            input.value = data[textId].title ?? "";
+            input.dispatchEvent(new window.Event("sequence-title-ready"));
+          }
+        }
         slot.replaceChildren(postsPanel(id, textId, data[textId]));
         slot.dataset.loaded = "true";
       }
@@ -312,6 +310,7 @@ async function loadDashboardTexts(id: string, scope: HTMLElement, routeId: strin
 }
 
 type SequenceState = { status: "idle" | "running" | "done" | "error"; progress: number; message: string };
+type CoverState = { status: "idle" | "running" | "done" | "error"; progress: number; message: string; has_applied: boolean; title: string };
 const sequenceActivators = new WeakMap<Element, () => void>();
 const projectObservers = new Set<IntersectionObserver>();
 const rowObservers = new Set<ResizeObserver>();
@@ -357,8 +356,7 @@ function sequenceCard(p: Project, scope: HTMLElement, routeId: string): HTMLLIEl
   const complete = p.status === "done" && p.clips.length === p.settings.film?.episodes && p.clips.every((c) => c.status === "done" && !!c.video);
   button.disabled = !complete;
   actions.append(button);
-  body.append(el("p", { className: "kicker" }, el("span", { textContent: "video gabungan" })),
-              el("h3", { textContent: "Gabungan clip" }), actions, note);
+  body.append(el("p", { className: "kicker" }, el("span", { textContent: "video gabungan" })), actions, note);
   const card = el("li", { className: "editor-clip" }, media, body);
   let timer = 0;
   const show = (state: SequenceState) => {
@@ -368,8 +366,80 @@ function sequenceCard(p: Project, scope: HTMLElement, routeId: string): HTMLLIEl
       const video = el("video", { src: `${endpoint}/video`, controls: true, preload: "metadata", playsInline: true });
       video.style.aspectRatio = p.settings.clip.ratio.replace(":", " / ");
       media.replaceChildren(video);
-      actions.replaceChildren(el("a", { className: "text-button", href: `${endpoint}/download`, download: "", textContent: "download mp4" }));
+      const title = el("input", { maxLength: 120, placeholder: "Judul thumbnail" });
+      title.dataset.sequenceTitle = "";
+      title.setAttribute("aria-label", "Judul video gabungan");
+      const titleStatus = el("span", { className: "save-status" });
+      titleStatus.setAttribute("role", "status");
+      const titleCopy = el("button", { type: "button", className: "text-button", textContent: "copy" });
+      titleCopy.addEventListener("click", () => { void copy(title.value, titleCopy); });
+      const titleBox = el("div", { className: "post-field sequence-title" },
+        el("div", { className: "field-head" }, el("span", { textContent: "judul" }), titleCopy), title, titleStatus);
+      const download = el("a", { className: "text-button", href: `${endpoint}/download`, download: "", textContent: "download" });
+      const apply = el("button", { type: "button", className: "text-button", textContent: "apply", disabled: true });
+      apply.setAttribute("aria-label", "Terapkan judul sebagai thumbnail");
+      const coverNote = el("p", { className: "hint sequence-cover-status" });
+      coverNote.setAttribute("role", "status");
+      const coverLink = el("a", { className: "text-button", href: `${endpoint}/cover/image`, download: "thumbnail-gabungan.jpg", textContent: "download thumbnail", hidden: true });
+      actions.classList.add("sequence-actions");
+      actions.replaceChildren(download, apply);
+      body.insertBefore(titleBox, actions);
+      body.insertBefore(coverNote, note);
+      body.insertBefore(coverLink, note);
       note.textContent = "";
+      let coverTimer = 0;
+      let covering = false;
+      title.addEventListener("sequence-title-ready", () => { apply.disabled = covering || !title.value.trim(); });
+      title.addEventListener("input", () => {
+        title.dataset.edited = "true";
+        apply.disabled = covering || !title.value.trim();
+        queueSave(p.id, "sequence", "title", title.value, titleStatus);
+      });
+      const showCover = (cover: CoverState) => {
+        if (!card.isConnected || editing !== routeId) return;
+        clearTimeout(coverTimer);
+        covering = cover.status === "running";
+        apply.disabled = covering || !title.value.trim();
+        apply.textContent = covering ? "menerapkan…" : "apply";
+        coverNote.classList.toggle("error", cover.status === "error");
+        coverNote.textContent = covering ? `${cover.message || "Menerapkan thumbnail"} · ${Math.round(cover.progress * 100)}%`
+          : cover.status === "error" ? cover.message : cover.has_applied ? `Thumbnail diterapkan: ${cover.title}` : "";
+        coverLink.hidden = !cover.has_applied;
+        if (cover.has_applied) {
+          const imageUrl = `${endpoint}/cover/image?v=${Date.now()}`;
+          video.poster = imageUrl;
+          coverLink.href = imageUrl;
+        }
+        if (covering) coverTimer = window.setTimeout(checkCover, 1000);
+      };
+      const checkCover = async () => {
+        if (!card.isConnected || editing !== routeId) return;
+        try {
+          const response = await fetch(`${endpoint}/cover`, { cache: "no-store" });
+          if (!response.ok) throw new Error(`status ${response.status}`);
+          showCover(await response.json());
+        } catch {
+          if (card.isConnected) { coverNote.textContent = "Status thumbnail tidak dapat diperiksa."; coverNote.classList.add("error"); }
+        }
+      };
+      apply.addEventListener("click", async () => {
+        if (!title.value.trim()) return;
+        covering = true;
+        apply.disabled = true;
+        coverNote.textContent = "Menyiapkan thumbnail…";
+        try {
+          const response = await fetch(`${endpoint}/cover`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: title.value }) });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.detail ?? `status ${response.status}`);
+          showCover(data);
+        } catch (error) {
+          covering = false;
+          apply.disabled = !title.value.trim();
+          coverNote.textContent = (error as Error).message;
+          coverNote.classList.add("error");
+        }
+      });
+      void checkCover();
       if (!body.querySelector("[data-text-id]")) {
         body.append(textPlaceholder("sequence"));
         void loadDashboardTexts(p.id, scope, routeId);

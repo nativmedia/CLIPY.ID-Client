@@ -39,7 +39,7 @@ from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from clipy import captions, dashboard_text, film_sequence, keys, media, projects, social, thumbs, tts, uploads
+from clipy import captions, dashboard_text, film_sequence, keys, media, projects, sequence_cover, social, thumbs, tts, uploads
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -594,7 +594,7 @@ def download_film_sequence(project_id: str):
     if not p:
         raise HTTPException(404, "project not found")
     try:
-        output = film_sequence.download(p)
+        output = sequence_cover.video(p)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     return FileResponse(output, media_type="video/mp4", filename=f"clipy-{p.id}-gabungan.mp4")
@@ -606,10 +606,46 @@ def preview_film_sequence(project_id: str):
     if not p:
         raise HTTPException(404, "project not found")
     try:
-        output = film_sequence.download(p)
+        output = sequence_cover.video(p)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     return FileResponse(output, media_type="video/mp4", filename=f"clipy-{p.id}-gabungan.mp4",
+                        content_disposition_type="inline")
+
+
+class SequenceCoverRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+
+
+@app.post("/api/projects/{project_id}/film-sequence/cover")
+def apply_sequence_cover(project_id: str, req: SequenceCoverRequest):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    try:
+        return sequence_cover.start(p, req.title)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.get("/api/projects/{project_id}/film-sequence/cover")
+def sequence_cover_status(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    return sequence_cover.status(p)
+
+
+@app.get("/api/projects/{project_id}/film-sequence/cover/image")
+def sequence_cover_image(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    try:
+        image = sequence_cover.image(p)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return FileResponse(image, media_type="image/jpeg", filename=f"clipy-{p.id}-thumbnail.jpg",
                         content_disposition_type="inline")
 
 
