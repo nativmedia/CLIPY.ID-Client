@@ -54,7 +54,7 @@ export function clipLayout(settings: Project["settings"]): string {
   const film = settings.mode === "filming" ? settings.film : null;
   const crop = film?.source_ratio ?? settings.clip.clip_ratio;
   const background = film?.background ?? settings.clip.background;
-  if (crop != null) return `${settings.clip.ratio} · ${crop === "auto" ? "ukuran asli" : crop === "none" ? "no crop" : crop} · ${background ?? "blur"}`;
+  if (crop != null) return `${settings.clip.ratio} · ${crop === "auto" ? "auto (output ratio)" : crop === "none" ? "no crop" : crop} · ${background ?? "black"}`;
   return `${settings.clip.ratio} ${settings.clip.fit === "crop" ? "crop" : "no crop"}`;
 }
 
@@ -125,7 +125,8 @@ modalEdit.addEventListener("click", () => {
 const editor = $<HTMLElement>("#editor");
 const editorClips = $<HTMLOListElement>("#editor-clips");
 const otherProjects = $<HTMLDivElement>("#editor-other-projects");
-const scrollControls = $<HTMLDivElement>("#editor-scroll-controls");
+const editorIntro = document.querySelector<HTMLElement>("#editor-intro");
+const editorPrimaryRow = document.querySelector<HTMLElement>("#editor-primary-row");
 const editorHint = $<HTMLParagraphElement>("#editor-hint");
 let editing = "";
 const pendingSaves = new Map<string, number>();
@@ -383,7 +384,7 @@ function scrollButtons(grid: HTMLOListElement, row: HTMLElement) {
   window.setTimeout(update, 0);
   const clipStep = () => {
     const card = grid.querySelector<HTMLElement>(".editor-clip");
-    const gap = Number.parseFloat(getComputedStyle(grid).columnGap) || 0;
+    const gap = Number.parseFloat(window.getComputedStyle(grid).columnGap) || 0;
     return (card?.getBoundingClientRect().width || grid.clientWidth) + gap;
   };
   left.addEventListener("click", () => grid.scrollBy({ left: -clipStep(), behavior: "smooth" }));
@@ -550,6 +551,61 @@ function followUntilDone(id: string, routeId = editing) {
   }, 2000);
 }
 
+/** One project section, kept in the same order as the Project Result list. */
+function dashboardProject(p: Project, routeId: string, selected: boolean): HTMLElement {
+  const grid = el("ol", { className: "editor-clips" });
+  const row = el("div", { className: "editor-row" }, grid);
+  const section = el("section", { className: `editor-project${selected ? " is-target" : ""}` },
+    el("div", { className: "editor-intro" },
+      el("img", { className: "editor-thumb", src: p.thumbnail, alt: "" }),
+      el("div", {}, el("div", { className: "editor-title-row" }, el("h2", { textContent: p.title || p.url }), ...titleActions(p)),
+        el("p", { className: "editor-meta", textContent: `${clipLayout(p.settings)} · ${p.clips.filter((c) => c.status === "done").length}/${p.clips.length} clips` }))),
+    scrollButtons(grid, row), row);
+  section.dataset.projectId = p.id;
+  section.id = `project-dashboard-${p.id}`;
+
+  const combined = p.settings.mode === "filming" ? sequenceCard(p, grid, routeId) : null;
+  grid.replaceChildren(...p.clips.map((c) => clipCard(p, c)), ...(combined ? [combined] : []));
+
+  // Keep off-screen projects inexpensive, but the project the user opened is ready immediately.
+  const load = () => {
+    if (combined) sequenceActivators.get(combined)?.();
+    if (p.clips.some((c) => c.video)) void loadDashboardTexts(p.id, grid, routeId);
+  };
+  const activate = () => {
+    if (!section.isConnected || editing !== routeId) return;
+    load();
+  };
+  // It is only connected after renderEditor appends it. Defer activation so the sequence card
+  // can query its endpoint instead of deciding it is off-screen during construction.
+  window.setTimeout(() => {
+    if (selected || !("IntersectionObserver" in window)) {
+      activate();
+      return;
+    }
+    if (!section.isConnected || editing !== routeId) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        observer.disconnect();
+        projectObservers.delete(observer);
+        activate();
+      }
+    }, { root: editor, rootMargin: "300px" });
+    projectObservers.add(observer);
+    observer.observe(section);
+  }, 0);
+  return section;
+}
+
+function scrollToDashboardProject(section: HTMLElement, routeId: string) {
+  const reveal = () => {
+    if (editing !== routeId || editor.hidden || !section.isConnected || typeof section.scrollIntoView !== "function") return;
+    section.scrollIntoView({ behavior: "auto", block: "start" });
+  };
+  if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(reveal);
+  else window.setTimeout(reveal, 0);
+}
+
 async function renderEditor(id: string) {
   editing = id;
   editorHint.textContent = "";
@@ -558,65 +614,45 @@ async function renderEditor(id: string) {
   if (editing !== id || editor.hidden) return;
   if (!res.ok) {
     editorClips.replaceChildren();
+    otherProjects.replaceChildren();
     editorHint.textContent = "project not found";
     editorHint.classList.add("error");
     return;
   }
-  const p: Project = await res.json();
-  $<HTMLImageElement>("#editor-thumb").src = p.thumbnail;
-  $<HTMLElement>("#editor-title").textContent = p.title || p.url;
-  $<HTMLElement>("#editor-title-actions").replaceChildren(...titleActions(p));
-  const s = p.settings;
-  $<HTMLElement>("#editor-meta").replaceChildren(
-    `${clipLayout(s)} · ${p.clips.filter((c) => c.status === "done").length}/${p.clips.length} clips · `,
-    p.url ? el("a", { href: p.url, target: "_blank", rel: "noopener", textContent: "source video" }) : "uploaded video",
-  );
+  const selected: Project = await res.json();
 
   projectObservers.forEach((observer) => observer.disconnect());
   projectObservers.clear();
   rowObservers.forEach((observer) => observer.disconnect());
   rowObservers.clear();
+  editorIntro && (editorIntro.hidden = true);
+  editorPrimaryRow && (editorPrimaryRow.hidden = true);
+  editorClips.replaceChildren();
   otherProjects.replaceChildren();
-  editorClips.scrollLeft = 0;
-  scrollControls.replaceChildren(scrollButtons(editorClips, $<HTMLElement>("#editor-primary-row")));
-  editorClips.replaceChildren(...p.clips.map((c) => clipCard(p, c)),
-    ...(p.settings.mode === "filming" && p.clips.length ? [sequenceCard(p, editorClips, id)] : []));
-  if (p.clips.some((c) => c.video)) void loadDashboardTexts(id, editorClips, id);
-  if (!["done", "error", "cancelled"].includes(p.status)) followUntilDone(id);
+  if (!["done", "error", "cancelled"].includes(selected.status)) followUntilDone(id);
+
   try {
     const listResponse = await fetch("/api/projects");
-    if (!listResponse.ok) return;
-    const others: Project[] = await listResponse.json();
+    if (!listResponse.ok) throw new Error("status " + listResponse.status);
+    const listed: Project[] = await listResponse.json();
     if (editing !== id || editor.hidden) return;
-    for (const other of others) {
-      if (other.id === id || !other.clips.length) continue;
-      const grid = el("ol", { className: "editor-clips" });
-      const row = el("div", { className: "editor-row" }, grid);
-      const section = el("section", { className: "editor-other-project" },
-        el("div", { className: "editor-intro" },
-          el("img", { className: "editor-thumb", src: other.thumbnail, alt: "" }),
-          el("div", {}, el("div", { className: "editor-title-row" }, el("h2", { textContent: other.title || other.url }), ...titleActions(other)),
-             el("p", { className: "editor-meta", textContent: `${clipLayout(other.settings)} · ${other.clips.filter((c) => c.status === "done").length}/${other.clips.length} clips` }))),
-        scrollButtons(grid, row), row);
+    // The API already returns the same newest-first order as Project Result. Do not promote the selected project.
+    const ordered = listed.some((project) => project.id === selected.id) ? listed : [selected, ...listed];
+    let target: HTMLElement | null = null;
+    for (const project of ordered) {
+      if (!project.clips.length && project.id !== selected.id) continue;
+      const section = dashboardProject(project, id, project.id === selected.id);
       otherProjects.append(section);
-      const combined = other.settings.mode === "filming" ? sequenceCard(other, grid, id) : null;
-      grid.replaceChildren(...other.clips.map((c) => clipCard(other, c)),
-        ...(combined ? [combined] : []));
-      // Don't spend API calls generating descriptions for off-screen projects.
-      const load = () => {
-        if (combined) sequenceActivators.get(combined)?.();
-        if (other.clips.some((c) => c.video)) void loadDashboardTexts(other.id, grid, id);
-      };
-      if ("IntersectionObserver" in window) {
-        const observer = new IntersectionObserver((entries) => {
-          if (entries.some((entry) => entry.isIntersecting)) { observer.disconnect(); projectObservers.delete(observer); load(); }
-        }, { root: editor, rootMargin: "300px" });
-        projectObservers.add(observer);
-        observer.observe(section);
-      } else load();
+      if (project.id === selected.id) target = section;
     }
+    if (target) scrollToDashboardProject(target, id);
   } catch {
-    if (editing === id && !editor.hidden) editorHint.textContent = "Proyek lain belum dapat ditampilkan.";
+    // The requested project remains usable if the surrounding list cannot be fetched.
+    if (editing !== id || editor.hidden) return;
+    const target = dashboardProject(selected, id, true);
+    otherProjects.replaceChildren(target);
+    scrollToDashboardProject(target, id);
+    editorHint.textContent = "Proyek lain belum dapat ditampilkan.";
   }
 }
 

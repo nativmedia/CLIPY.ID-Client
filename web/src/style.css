@@ -773,7 +773,9 @@ body.locked { overflow: hidden; }
   border-bottom: 1px solid var(--divider);
 }
 .project-control { position: absolute; right: 0; top: 0; z-index: 1; }
-.project h3 { padding-right: 60px; }
+.project h3 { padding-right: 0; }
+.project-heading { display: flex; align-items: flex-start; min-width: 0; padding-right: 42px; }
+.project-heading .project-title { flex: 1; min-width: 0; }
 .project:last-child { border-bottom: 0; }
 .project-open { padding: 0; border: 0; background: none; cursor: pointer; align-self: start; }
 .project-thumb {
@@ -785,7 +787,8 @@ body.locked { overflow: hidden; }
   outline: 1px solid var(--hairline);
   transition: outline-color 0.15s ease;
 }
-.project-open:hover .project-thumb { outline-color: var(--accent); }
+.project-open:hover .project-thumb, .project-open:focus-visible .project-thumb { outline-color: var(--accent); }
+.project-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .project h3 { margin: 0; }
 .project-title {
   padding: 0;
@@ -799,8 +802,19 @@ body.locked { overflow: hidden; }
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  text-decoration: none;
 }
 .project-title:hover { color: var(--accent); }
+.project-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.project-dashboard-open {
+  position: absolute; top: 0; right: 0; z-index: 1;
+  display: grid; place-items: center; width: 32px; height: 32px; padding: 5px;
+  border: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--accent); cursor: pointer;
+}
+.project.has-project-control .project-dashboard-open { top: 40px; }
+.project-dashboard-open svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linejoin: miter; stroke-width: 1.7; }
+.project-dashboard-open:hover { border-color: var(--accent); background: var(--surface-2); }
+.project-dashboard-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .project .progress { margin: 6px 0 0; font-size: 11px; color: var(--fg-2); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 .project .progress.error { color: var(--error); white-space: normal; }
 .project .progress.done { color: var(--accent); }
@@ -850,13 +864,13 @@ body.locked { overflow: hidden; }
 }
 .clips .text-button, .clips .state { flex: none; }
 .clips .state { color: var(--fg-3); }
-.clip-status-icon, .clip-open-folder { flex: none; align-self: center; width: 28px; height: 28px; margin: -5px 0; padding: 5px; border: 0; background: none; color: var(--accent); }
+.clip-status-icon, .clip-download, .clip-open-folder { flex: none; align-self: center; width: 28px; height: 28px; margin: -5px 0; padding: 5px; border: 0; background: none; color: var(--accent); }
 .clip-status-icon { display: grid; place-items: center; }
-.clip-open-folder { display: grid; place-items: center; cursor: pointer; }
-.clip-open-folder:hover:not(:disabled) { color: var(--fg); }
-.clip-open-folder:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.clip-download, .clip-open-folder { display: grid; place-items: center; cursor: pointer; text-decoration: none; }
+.clip-download:hover, .clip-open-folder:hover:not(:disabled) { color: var(--fg); }
+.clip-download:focus-visible, .clip-open-folder:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .clip-open-folder:disabled { opacity: .45; cursor: wait; }
-.clip-status-icon svg, .clip-open-folder svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: square; stroke-linejoin: miter; stroke-width: 2.2; }
+.clip-status-icon svg, .clip-download svg, .clip-open-folder svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: square; stroke-linejoin: miter; stroke-width: 2.2; }
 .clip-status-icon svg { animation: clip-status-spin .8s linear infinite; }
 .clip-status-icon circle { stroke-dasharray: 24 20; }
 @keyframes clip-status-spin { to { transform: rotate(360deg); } }
@@ -1033,7 +1047,8 @@ body.locked { overflow: hidden; }
 .editor-meta { margin: 8px 0 0; font-size: 12px; color: var(--fg-3); }
 .editor-meta a { color: var(--fg-2); text-underline-offset: 3px; }
 .editor-meta a:hover { color: var(--accent); }
-.editor-other-project { margin-top: 56px; }
+.editor-project { margin-top: 56px; scroll-margin-top: 28px; }
+.editor-project:first-child { margin-top: 0; }
 .editor-scroll-controls { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .editor-scroll-button {
   display: grid;

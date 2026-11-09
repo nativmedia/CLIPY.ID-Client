@@ -15,6 +15,7 @@ test("dashboard displays clip descriptions and the combined video for one projec
     </body>`, { url: "http://localhost:4747/#/project/test" });
   Object.assign(global, { window: dom.window, document: dom.window.document, location: dom.window.location,
                           history: dom.window.history });
+  dom.window.HTMLElement.prototype.scrollIntoView = function () { this.dataset.scrolled = "true"; };
   const project = { id: "test", title: "Film", url: "", thumbnail: "", status: "done",
     settings: { mode: "filming", film: { episodes: 2 }, clip: { ratio: "9:16", fit: "crop" } },
     clips: [{ n: 1, title: "Klip satu", status: "done", video: "/1.mp4", start: 0, end: 1 },
@@ -42,22 +43,27 @@ test("dashboard displays clip descriptions and the combined video for one projec
   compiled.paths = Module._nodeModulePaths(process.cwd());
   compiled._compile(result.outputFiles[0].text, compiled.filename);
   await new Promise((resolve) => setTimeout(resolve, 100));
-  const cards = [...document.querySelectorAll("#editor-clips .editor-clip")];
+  const sections = [...document.querySelectorAll("#editor-other-projects .editor-project")];
+  assert.equal(sections.length, 2);
+  assert.match(sections[0].querySelector("h2").textContent, /Film/);
+  assert.match(sections[1].querySelector("h2").textContent, /Proyek lain/);
+  assert.equal(sections[0].dataset.scrolled, "true");
+  const cards = [...sections[0].querySelectorAll(".editor-clip")];
   assert.equal(cards.length, 3);
-  assert.equal(document.querySelectorAll(".editor-other-project .editor-clip").length, 2);
-  assert.match(document.querySelector(".editor-other-project h2").textContent, /Proyek lain/);
-  const grid = document.querySelector("#editor-clips");
+  assert.equal(sections[1].querySelectorAll(".editor-clip").length, 2);
+  const grid = sections[0].querySelector(".editor-clips");
   Object.defineProperty(grid, "clientWidth", { value: 400 });
   Object.defineProperty(grid, "scrollWidth", { value: 1000 });
+  cards[0].getBoundingClientRect = () => ({ width: 320 });
   grid.dispatchEvent(new dom.window.Event("scroll"));
-  assert.equal(document.querySelector("#editor-primary-row").classList.contains("can-scroll-right"), true);
+  assert.equal(sections[0].querySelector(".editor-row").classList.contains("can-scroll-right"), true);
   let distance = 0;
   grid.scrollBy = (options) => { distance = options.left; };
-  document.querySelector('#editor-scroll-controls [aria-label="Geser video ke kanan"]').click();
+  sections[0].querySelector('[aria-label="Geser video ke kanan"]').click();
   assert.equal(distance, 320);
   grid.scrollLeft = 100;
   grid.dispatchEvent(new dom.window.Event("scroll"));
-  assert.equal(document.querySelector("#editor-primary-row").classList.contains("can-scroll-left"), true);
+  assert.equal(sections[0].querySelector(".editor-row").classList.contains("can-scroll-left"), true);
   assert.equal(cards[2].querySelector("video").getAttribute("src"), "/api/projects/test/film-sequence/video");
   assert.equal(cards[2].querySelector("a[download]").getAttribute("href"), "/api/projects/test/film-sequence/download");
   assert.equal(cards[2].querySelector('input[aria-label="Judul video gabungan"]').value, "Judul utuh");
@@ -85,7 +91,7 @@ test("dashboard displays clip descriptions and the combined video for one projec
   assert.equal(cards[0].querySelector("textarea").value, "Pendek");
   assert.equal(cards[0].querySelector(".count"), null);
   assert.ok(calls.some(([url]) => url.endsWith("/dashboard-text")));
-  const otherDescription = document.querySelector('.editor-other-project textarea');
+  const otherDescription = sections[1].querySelector("textarea");
   otherDescription.value = "Edit untuk proyek lain";
   otherDescription.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
   await new Promise((resolve) => setTimeout(resolve, 750));
@@ -94,10 +100,14 @@ test("dashboard displays clip descriptions and the combined video for one projec
   assert.equal(JSON.parse(saveCall[1].body).text, "Edit untuk proyek lain");
   dom.window.location.hash = "#/project/other";
   await new Promise((resolve) => setTimeout(resolve, 100));
-  const otherCards = [...document.querySelectorAll("#editor-clips .editor-clip")];
+  const rerendered = [...document.querySelectorAll("#editor-other-projects .editor-project")];
+  assert.match(rerendered[0].querySelector("h2").textContent, /Film/);
+  assert.match(rerendered[1].querySelector("h2").textContent, /Proyek lain/);
+  assert.equal(rerendered[1].dataset.scrolled, "true");
+  const otherCards = [...rerendered[1].querySelectorAll(".editor-clip")];
   assert.equal(otherCards.length, 2);
   assert.match(otherCards[0].textContent, /Hasil proyek lain/);
-  assert.doesNotMatch(document.querySelector("#editor-clips").textContent, /Klip satu/);
+  assert.match(rerendered[0].textContent, /Klip satu/);
   dom.window.close();
 });
 
@@ -132,7 +142,7 @@ test("combined video can download or apply an edited title before generated text
   compiled.paths = Module._nodeModulePaths(process.cwd());
   compiled._compile(result.outputFiles[0].text, compiled.filename);
   await new Promise((resolve) => setTimeout(resolve, 40));
-  const card = [...document.querySelectorAll("#editor-clips .editor-clip")][1];
+  const card = [...document.querySelectorAll("#editor-other-projects .editor-clip")][1];
   assert.equal(card.querySelector('a[download]').textContent, "download");
   const input = card.querySelector('input[aria-label="Judul video gabungan"]');
   input.value = "Judul saya";

@@ -48,6 +48,11 @@ test("React project islands preserve settings, preview, retry and cleanup", asyn
   assert.doesNotMatch(card.querySelector("dl").textContent, /info transkrip/);
   assert.match(card.querySelector("dl").textContent, /CLIPY.*60%.*bottom/);
   assert.equal(card.querySelectorAll("ol.clips > li").length, 2);
+  const download = card.querySelector(".clip-download");
+  const openFolder = card.querySelector(".clip-open-folder");
+  assert.ok(download);
+  assert.equal(download.getAttribute("href"), "/clip.mp4");
+  assert.ok(download.compareDocumentPosition(openFolder) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
   await act(async () => card.querySelector(".link-title").click());
   assert.deepEqual(preview, ["one", 1]);
   await act(async () => card.querySelector("button.warn").click());

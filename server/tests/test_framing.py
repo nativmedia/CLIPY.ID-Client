@@ -90,12 +90,22 @@ class FramingTests(unittest.TestCase):
         plan = self.plan(self.group_samples())
         self.assertTrue(all(s.layout == 'single' for s in plan.segments))
 
-    def test_long_quiet_group_stays_on_speaker_without_timer_variation(self):
+    def test_long_quiet_group_uses_one_held_double_variation(self):
         samples = [(n / 6, [(0.25, .4, .1 + (n % 2) * .08, .15),
                             (.75, .4, .1, .15)]) for n in range(240)]
         plan = self.plan(samples)
-        self.assertTrue(all(s.layout == 'single' for s in plan.segments))
-        self.assertEqual(len(plan.segments), 1)
+        collages = [segment for segment in plan.segments if segment.layout == 'double']
+        self.assertTrue(collages)
+        self.assertEqual(plan.segments[0].layout, 'single')
+        self.assertEqual(plan.segments[-1].layout, 'single')
+        self.assertGreaterEqual(collages[0].start, framing.MIN_HOLD)
+        self.assertTrue(all(segment.tertiary is None for segment in collages))
+
+    def test_long_quiet_three_person_group_uses_held_triple_variation(self):
+        samples = [(n / 6, [(0.18, .4, .1 + (n % 2) * .08, .15),
+                            (.50, .4, .1, .15), (.82, .4, .1, .15)]) for n in range(240)]
+        plan = self.plan(samples)
+        self.assertTrue(any(segment.layout == 'triple' for segment in plan.segments))
 
     def test_animated_response_is_brief_and_returns_to_speaker(self):
         plan = self.plan(self.group_samples(seconds=40))

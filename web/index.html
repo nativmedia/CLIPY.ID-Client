@@ -100,8 +100,8 @@
             <p class="kicker"><span>filming</span></p>
             <div class="row cols-4">
               <label class="pick"><select id="film-ratio" required><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>output ratio</span></label>
-              <label class="pick"><select id="film-source-ratio" required><option value="none">no crop</option><option value="blackbar">crop black bar</option><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>crop clip</span></label>
-              <label class="pick" id="film-background-pick"><select id="film-background" required><option value="blur">blur</option><option value="black">hitam</option><option value="white">putih</option></select><span>background</span></label>
+              <label class="pick"><select id="film-source-ratio" required><option value="auto">auto (output ratio)</option><option value="none">no crop</option><option value="blackbar">crop black bar</option><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>crop clip</span></label>
+              <label class="pick" id="film-background-pick"><select id="film-background" required><option value="black">no background</option><option value="white">putih</option><option value="blur">blur</option></select><span>background</span></label>
               <label class="pick"><select id="film-duration" required><option value="60">≤ 60 detik</option><option value="90">≤ 90 detik</option><option value="120">≤ 120 detik</option><option value="180">≤ 180 detik</option></select><span>duration</span></label>
               <div class="pick episode-pick">
                 <input class="text-pick" id="film-episodes" aria-labelledby="film-episodes-label" required type="number" min="1" max="10" value="4" />
@@ -148,8 +148,8 @@
             <p class="kicker"><span>clip</span></p>
             <div class="row cols-4">
               <label class="pick"><select id="opt-ratio" required></select><span>output ratio</span></label>
-              <label class="pick"><select id="opt-clip-ratio" required><option value="none">no crop</option><option value="blackbar">crop black bar</option><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>crop clip</span></label>
-              <label class="pick"><select id="opt-background" required><option value="blur">blur</option><option value="black">hitam</option><option value="white">putih</option></select><span>background</span></label>
+              <label class="pick"><select id="opt-clip-ratio" required><option value="auto">auto (output ratio)</option><option value="none">no crop</option><option value="blackbar">crop black bar</option><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>crop clip</span></label>
+              <label class="pick"><select id="opt-background" required><option value="black">no background</option><option value="white">putih</option><option value="blur">blur</option></select><span>background</span></label>
               <label class="pick"><select id="opt-duration" required></select><span>duration</span></label>
               <label class="pick"><select id="opt-count" required></select><span>clips</span></label>
             </div>
@@ -273,12 +273,12 @@
     </div>
 
     <!-- Project editor page -->
-    <section class="editor" id="editor" hidden aria-labelledby="editor-title">
+    <section class="editor" id="editor" hidden aria-label="Project dashboard">
       <header class="editor-head">
         <button type="button" class="text-button" id="editor-back">← back</button>
         <p class="kicker"><span>project dashboard</span></p>
       </header>
-      <div class="editor-intro">
+      <div class="editor-intro" id="editor-intro" hidden>
         <img class="editor-thumb" id="editor-thumb" alt="" />
         <div>
           <div class="editor-title-row"><h2 id="editor-title"></h2><div class="editor-title-actions" id="editor-title-actions"></div></div>
@@ -286,8 +286,8 @@
         </div>
       </div>
       <p class="hint" id="editor-hint"></p>
-      <div id="editor-scroll-controls"></div>
-      <div class="editor-row" id="editor-primary-row"><ol class="editor-clips" id="editor-clips"></ol></div>
+      <div id="editor-scroll-controls" hidden></div>
+      <div class="editor-row" id="editor-primary-row" hidden><ol class="editor-clips" id="editor-clips"></ol></div>
       <div id="editor-other-projects"></div>
     </section>
 

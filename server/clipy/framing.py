@@ -505,6 +505,32 @@ def _reaction_runs(people: list[Person], start: float, end: float,
     return runs
 
 
+def _held_group_runs(people: list[Person], start: float, end: float,
+                     speaker_runs: list[tuple[float, int]], earliest: float) -> list[tuple[float, str]]:
+    """Use one held two/three-person view for a long, clearly detected group.
+
+    This is deliberately a single, deterministic edit choice per camera shot,
+    rather than a random choice at every sampled frame.  It waits for the
+    ordinary speaker hold before changing composition, holds the collage for a
+    fixed beat, then returns to the speaker so the frame never flickers.
+    """
+    runs = [(start, "single")]
+    if len(people) < 2 or end - start < 2 * MIN_HOLD + LAYOUT_HOLD:
+        return runs
+    first = max(start + MIN_HOLD, earliest)
+    last = end - LAYOUT_HOLD - MIN_HOLD
+    for t in np.arange(first, last + STEP / 2, STEP):
+        who = next(who for at, who in reversed(speaker_runs) if at <= t)
+        window_start, window_end = float(t - MIN_HOLD), float(t + LAYOUT_HOLD)
+        if not _visible(people[who], window_start, window_end):
+            continue
+        if any(i != who and _visible(person, window_start, window_end)
+               for i, person in enumerate(people)):
+            runs.extend([(float(t), "group"), (float(t + LAYOUT_HOLD), "single")])
+            break
+    return runs
+
+
 def _center_wide(src_w: int, src_h: int) -> tuple[int, int, int, int]:
     h = int(min(src_h, src_w * 4 / 6)) // 2 * 2
     w = int(h * 6 / 4) // 2 * 2
@@ -564,7 +590,10 @@ def plan_crop(src: Path, width: int, height: int, words: list[Word]) -> Plan | N
         current_composition = None
         changed_at = start
         runs = _hold(people, start, min(end, duration), loudness)
+        speaker_changes = {t for t, _ in runs[1:]}
         layouts = _reaction_runs(people, start, end, runs, reaction_remaining, reaction_after) if portrait else [(start, "single")]
+        if portrait and len(layouts) == 1:
+            layouts = _held_group_runs(people, start, end, runs, reaction_after)
         if len(layouts) > 1:
             reaction_remaining -= 4
             reaction_after = layouts[-1][0] + 16
@@ -589,6 +618,14 @@ def plan_crop(src: Path, width: int, height: int, words: list[Word]) -> Plan | N
             # confidence changes must not alternate listeners in the same layout.
             reaction_at = next(at for at, value in reversed(layouts) if at <= t0)
             responses = _responders(people, who, reaction_at) if mode == "group" else []
+            if mode == "group" and not responses:
+                # The deliberate long-shot variation may contain quiet listeners.
+                # They are still eligible when they are stable, foreground faces.
+                responses = sorted(
+                    (j for j in visible if j != who and abs(people[j].cx - people[who].cx) >= SAME_FACE * 2),
+                    key=lambda j: (float(np.median([s[3] for s in people[j].track])), _motion(people[j].track)),
+                    reverse=True,
+                )
             partner = next((j for j in responses if j in visible), None)
             if partner not in visible:
                 partner = None
@@ -610,6 +647,7 @@ def plan_crop(src: Path, width: int, height: int, words: list[Word]) -> Plan | N
                 composition = ("single", (who,))
             if (current_composition is not None and composition != current_composition
                     and t0 not in {at for at, _ in layouts[1:]}
+                    and t0 not in speaker_changes
                     and (t0 - changed_at < max(MIN_HOLD, 5.0) or end - t0 < MIN_HOLD)):
                 composition = current_composition
             if composition != current_composition:

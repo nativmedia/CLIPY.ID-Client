@@ -25,10 +25,12 @@ class FilmPlanningTests(unittest.TestCase):
             film.plan(self.words, 20, self.config)
         self.assertEqual(self.config["detected_source_type"], "unknown")
 
-    def test_background_only_when_ratio_differs(self):
+    def test_auto_fills_output_and_background_only_applies_to_no_crop(self):
         self.assertNotIn("pad=", film._filming_graph(16 / 9, 1920, 1080, "black"))
-        self.assertIn("color=white", film._filming_graph(16 / 9, 1080, 1920, "white"))
-        self.assertIn("boxblur", film._filming_graph(16 / 9, 1080, 1920, "blur"))
+        self.assertNotIn("pad=", film._filming_graph(16 / 9, 1080, 1920, "white", "auto"))
+        self.assertIn("crop=1080:1920", film._filming_graph(16 / 9, 1080, 1920, "white", "auto"))
+        self.assertIn("color=white", film._filming_graph(16 / 9, 1080, 1920, "white", "none"))
+        self.assertIn("boxblur", film._filming_graph(16 / 9, 1080, 1920, "blur", "none"))
 
     def test_clip_shape_is_centered_on_output(self):
         # A 16:9 red source, cropped to 1:1 on a 9:16 black canvas.

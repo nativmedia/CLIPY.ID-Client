@@ -26,6 +26,8 @@ import traceback
 import uuid
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+from urllib.parse import quote
+import re
 
 from . import captions, framing, media, select, social, thumbs, tts, uploads
 from .captions import CaptionStyle, Word
@@ -35,6 +37,18 @@ TERMINAL = {"done", "error", "cancelled"}
 
 # Share of the progress bar for each stage; clipping is split evenly between clips.
 STAGES = {"queued": (0, 0), "downloading": (0, 0.08), "transcribing": (0.08, 0.4), "selecting": (0.4, 0.45), "clipping": (0.45, 1.0)}
+
+_WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+
+
+def clip_file_stem(clip: dict) -> str:
+    """A readable, Windows- and FFmpeg-safe base name for final deliverables."""
+    number = int(clip.get("n", 0) or 0)
+    title = re.sub(r"[^\w -]+", " ", str(clip.get("title") or "clip"), flags=re.UNICODE)
+    title = re.sub(r"\s+", " ", title).strip(" .")[:100].rstrip(" .") or "clip"
+    if title.upper() in _WINDOWS_RESERVED:
+        title = f"_{title}"
+    return f"{number:02d} - {title}"
 
 
 @dataclass
@@ -92,8 +106,14 @@ class Project:
         safe_title = "-".join(safe_title.split())[:60] or "project"
         return Path(self.export_dir) / f"CLIPY-{safe_title}-{self.id}"
 
+    def clip_asset_name(self, clip: dict, extension: str) -> str:
+        return f"{clip_file_stem(clip)}.{extension.lstrip('.')}"
+
+    def clip_asset_path(self, clip: dict, extension: str) -> Path:
+        return self.dir / self.clip_asset_name(clip, extension)
+
     def file_url(self, name: str) -> str:
-        return f"/api/projects/{self.id}/files/{name}"
+        return f"/api/projects/{self.id}/files/{quote(name, safe='')}"
 
     def public(self) -> dict:
         d = asdict(self)
@@ -109,7 +129,7 @@ class Project:
         else:
             d["thumbnail"] = self.file_url("poster.jpg") if (self.dir / "poster.jpg").exists() else ""
         for c in d["clips"]:
-            for key in ("video", "thumb", "srt"):
+            for key in ("video", "thumb", "srt", "ass"):
                 if c.get(key):
                     c[key] = self.file_url(c[key])
         return d
@@ -204,7 +224,36 @@ def _load(*, interrupted: bool = False) -> None:
         if interrupted and p.status not in TERMINAL:
             p.status, p.error, p.stage = "error", "interrupted: the server restarted", "interrupted"
             p.save()
+        if p.status in TERMINAL and migrate_clip_assets(p):
+            p.save()
         _projects[p.id] = p
+
+
+def migrate_clip_assets(p: Project) -> bool:
+    """Give legacy final outputs the same readable names used by new projects."""
+    changed = False
+    for clip in p.clips:
+        if not isinstance(clip.get("n"), int):
+            continue
+        n = clip["n"]
+        for key, extension, legacy in (
+            ("video", "mp4", (f"clip_{n}.mp4",)),
+            ("srt", "srt", (f"clip_{n}.srt",)),
+            ("ass", "ass", (f"clip_{n}.ass", f"film_{n}.ass")),
+        ):
+            current = clip.get(key)
+            candidates = [current] if isinstance(current, str) and Path(current).name == current else []
+            candidates.extend(name for name in legacy if name not in candidates)
+            source = next((p.dir / name for name in candidates if (p.dir / name).is_file()), None)
+            if source is None:
+                continue
+            target = p.clip_asset_path(clip, extension)
+            if source != target and not target.exists():
+                source.replace(target)
+            if target.is_file() and clip.get(key) != target.name:
+                clip[key] = target.name
+                changed = True
+    return changed
 
 
 def create(url: str, video_id: str, settings: dict, upload_id: str | None = None, title: str = "",
@@ -366,7 +415,7 @@ def _clip_options(p: Project):
         "height": height,
         "fit": clip_cfg["fit"],
         "clip_ratio": clip_cfg.get("clip_ratio"),
-        "background": clip_cfg.get("background") or "blur",
+        "background": clip_cfg.get("background") or "black",
         "style": CaptionStyle(**p.settings["caption"]),
         "thumb_cfg": p.settings["thumb"],
         "dubbing_speed": clip_cfg.get("dubbing_speed", 1.0),
@@ -571,7 +620,7 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
     d = p.dir
     width, height, fit = opts["width"], opts["height"], opts["fit"]
     thumb_cfg = opts["thumb_cfg"]
-    for stale in ("video", "thumb"):
+    for stale in ("video", "thumb", "srt", "ass"):
         clip.pop(stale, None)
 
     clip["status"] = "downloading"
@@ -597,18 +646,19 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
         for w in words
         if w.start >= clip["start"] - 0.05 and w.end <= clip["end"] + 0.3
     ]
-    ass = d / f"clip_{n}.ass"
+    ass = p.clip_asset_path(clip, "ass")
+    srt = p.clip_asset_path(clip, "srt")
     ass.write_text(captions.build_ass(local, opts["style"], width, height), encoding="utf-8")
-    (d / f"clip_{n}.srt").write_text(captions.build_srt(local, opts["style"], width, height), encoding="utf-8")
-    clip["srt"] = f"clip_{n}.srt"
+    srt.write_text(captions.build_srt(local, opts["style"], width, height), encoding="utf-8")
+    clip["srt"], clip["ass"] = srt.name, ass.name
 
     source_ratio = film._source_ratio(src) if clip_ratio is not None else None
-    background = opts.get("background", "blur")
+    background = opts.get("background", "black")
     plan = None
-    if fit == "crop" and clip_ratio not in ("auto", "none", "blackbar"):
+    if fit == "crop" and clip_ratio not in ("none", "blackbar"):
         clip["status"] = "framing"
         try:
-            frame_width, frame_height = (media.clip_frame_size(width, clip_ratio, source_ratio)
+            frame_width, frame_height = (media.clip_frame_size(width, clip_ratio, source_ratio, output_height=height)
                                          if clip_ratio is not None and source_ratio is not None else (width, height))
             plan = framing.plan_crop(src, frame_width, frame_height, local)
         except Exception:
@@ -642,7 +692,7 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
         thumbs.add_brand(thumb, opts["brand"], opts["brand_position"], media.brand_margin(width, height))
     clip["thumb"] = thumb.name
 
-    out = d / f"clip_{n}.mp4"
+    out = p.clip_asset_path(clip, "mp4")
     if voice:
         clip["status"] = "dubbing"
         try:
@@ -688,7 +738,7 @@ def _export_results(p: Project) -> None:
         names = {"dashboard-text.json", "filming-sequence.mp4", "filming-sequence.json"}
         for clip in p.clips:
             if clip.get("status") == "done":
-                names.update(name for name in (clip.get("video"), clip.get("thumb"), clip.get("srt")) if name)
+                names.update(name for name in (clip.get("video"), clip.get("thumb"), clip.get("srt"), clip.get("ass")) if name)
         for name in names:
             source = p.dir / name
             if source.is_file():
@@ -709,9 +759,10 @@ def sequence_parts(p: Project) -> list[tuple[Path, float]]:
         if clip.get("status") != "done":
             continue
         n = clip["n"]
-        if clip.get("video") != f"clip_{n}.mp4":
+        name = clip.get("video")
+        if not isinstance(name, str) or Path(name).name != name:
             raise ValueError(f"Video klip {n} tidak tersedia")
-        video = p.dir / f"clip_{n}.mp4"
+        video = p.dir / name
         if not video.is_file():
             raise ValueError(f"Video klip {n} tidak tersedia")
         body = p.dir / f"body_{n}.mp4"
@@ -831,6 +882,8 @@ def _worker() -> None:
             p = _projects.get(pid)
             if p and p.status != "cancelled":
                 p = _checkpoint(pid) or p
+                if p.status in TERMINAL and migrate_clip_assets(p):
+                    p.save()
                 _projects[pid] = p
                 if p.status not in TERMINAL:
                     _fail(p, f"Project worker exited before completing the project (status {code})")

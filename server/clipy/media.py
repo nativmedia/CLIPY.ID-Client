@@ -411,9 +411,15 @@ def reframe(width: int, height: int, fit: str, plan=None, offset: float = 0.0, s
 
 
 
-def clip_frame_size(width: int, clip_ratio: str, source_ratio: float) -> tuple[int, int]:
-    """Fill the output width while maintaining the selected shape before canvas cropping."""
-    if clip_ratio in ("auto", "none", "blackbar"):
+def clip_frame_size(width: int, clip_ratio: str, source_ratio: float, *, output_height: int | None = None) -> tuple[int, int]:
+    """Fill the output width using the selected clip shape before canvas cropping.
+
+    ``auto`` takes the final output shape when it is known.  Keeping the source-ratio
+    fallback makes old direct callers retain their prior behavior.
+    """
+    if clip_ratio == "auto":
+        ratio = width / output_height if output_height else source_ratio
+    elif clip_ratio in ("none", "blackbar"):
         ratio = source_ratio
     else:
         w, h = clip_ratio.split(":")
@@ -429,7 +435,7 @@ def composed_reframe(width: int, height: int, clip_ratio: str, background: str,
     """Reframe to the clip shape and place it on an output-width canvas."""
     if background not in ("blur", "black", "white"):
         raise ValueError("Unknown background")
-    fg_width, fg_height = clip_frame_size(width, clip_ratio, source_ratio)
+    fg_width, fg_height = clip_frame_size(width, clip_ratio, source_ratio, output_height=height)
     # No crop preserves the whole source, including portrait sources on wide canvases.
     if clip_ratio in ("none", "blackbar") and fg_height > height:
         fg_height = height
@@ -499,7 +505,7 @@ TITLE_SECONDS = 3.0
 def render_clip(source: Path, ass: Path, out: Path, width: int, height: int, fit: str, on_progress=None,
                 brand: Path | None = None, brand_position: str = "bc", plan=None,
                 title: Path | None = None, *, clip_ratio: str | None = None,
-                background: str = "blur", source_ratio: float | None = None) -> Path:
+                background: str = "black", source_ratio: float | None = None) -> Path:
     """
     Reframe the clip (on the speaker when there's a plan), burn in the captions, stamp the
     branding mark (already built at its final size and opacity, see thumbs.build_brand), and
@@ -597,7 +603,7 @@ def mix_music(video: Path, music: Path, out: Path, start: float = 0, length: flo
 
 
 def grab_frame(source: Path, out: Path, width: int, height: int, fit: str, plan=None, *,
-               clip_ratio: str | None = None, background: str = "blur", source_ratio: float | None = None) -> Path:
+               clip_ratio: str | None = None, background: str = "black", source_ratio: float | None = None) -> Path:
     """A representative frame of the clip, reframed like the short (no captions), for the thumbnail."""
     duration = probe_duration(source)
     # Skip the very first moments, which are often mid-cut.

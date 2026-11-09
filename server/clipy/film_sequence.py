@@ -30,9 +30,11 @@ def _sources(p) -> list[Path]:
         raise ValueError("Urutan clip tidak lengkap; selesaikan atau ulangi semua clip")
     paths = []
     for clip in sorted(clips, key=lambda c: c["n"]):
-        name = f"clip_{clip['n']}.mp4"
+        name = clip.get("video")
+        if not isinstance(name, str) or Path(name).name != name:
+            raise ValueError(f"Video clip {clip['n']} tidak tersedia; ulangi clip tersebut")
         path = p.dir / name
-        if clip.get("video") != name or not path.is_file() or path.is_symlink():
+        if not path.is_file() or path.is_symlink():
             raise ValueError(f"Video clip {clip['n']} tidak tersedia; ulangi clip tersebut")
         paths.append(path)
     return paths

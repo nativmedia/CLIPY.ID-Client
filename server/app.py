@@ -12,7 +12,7 @@ CLIPY.ID API.
                           image? (custom thumbnail), logo? (branding)
     GET    /api/projects                     all projects, newest first
     GET    /api/projects/{id}                one project
-    GET    /api/projects/{id}/files/{name}   clip_N.mp4, thumb_N.jpg, clip_N.srt
+    GET    /api/projects/{id}/files/{name}   generated clip assets
     POST   /api/projects/{id}/clips/{n}/retry
     GET    /api/projects/{id}/posts          titles/descriptions per clip and platform
     PUT    /api/projects/{id}/posts  {posts} save edits
@@ -59,9 +59,10 @@ DURATIONS = [15, 30, 45, 60, 90, 120]
 class ClipSettings(BaseModel):
     ratio: str = Field(pattern="^(" + "|".join(re.escape(r) for r in media.RATIOS) + ")$")
     fit: str = Field(pattern="^(crop|fit)$")
-    # None keeps the rendering behavior of projects created before these options existed.
-    clip_ratio: str | None = Field(default=None, pattern=r"^(auto|none|blackbar|1:1|3:4|4:5|5:4|9:16|16:9)$")
-    background: str | None = Field(default=None, pattern=r"^(blur|black|white)$")
+    # New clips fill the chosen output ratio through the stable subject-framing pipeline.
+    # Already-saved projects can still omit this field and retain their old behavior.
+    clip_ratio: str = Field(default="auto", pattern=r"^(auto|none|blackbar|1:1|3:4|4:5|5:4|9:16|16:9)$")
+    background: str = Field(default="black", pattern=r"^(blur|black|white)$")
     count: int = Field(ge=1, le=10)
     max_duration: int = Field(ge=10, le=180)
     dubbing_speed: float = Field(default=1.0, ge=1, le=2)
@@ -113,7 +114,7 @@ class FilmSettings(BaseModel):
     voice: str = "id-ID-GadisNeural"
     source_type: str = Field(default="film", pattern="^(film|recap)$")
     source_ratio: str = Field(default="auto", pattern=r"^(auto|none|blackbar|1:1|3:4|4:5|5:4|9:16|16:9)$")
-    background: str = Field(default="blur", pattern="^(blur|black|white)$")
+    background: str = Field(default="black", pattern="^(blur|black|white)$")
 
 
 class Settings(BaseModel):
@@ -598,13 +599,38 @@ def open_project_output(project_id: str, request: Request):
     return {"ok": True}
 
 
+@app.post("/api/projects/{project_id}/source/open")
+def open_project_source(project_id: str, request: Request):
+    """Reveal the original local video folder for uploaded projects."""
+    require_local_browser(request)
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    source = p.local_video
+    if source is None:
+        raise HTTPException(409, "Video sumber lokal tidak tersedia")
+    if os.name != "nt":
+        raise HTTPException(501, "Buka folder hanya tersedia di Windows")
+    try:
+        os.startfile(str(source.parent))
+    except OSError as exc:
+        raise HTTPException(500, f"Tidak dapat membuka folder sumber: {exc}") from exc
+    return {"ok": True}
+
+
 @app.get("/api/projects/{project_id}/files/{name}")
 def project_file(project_id: str, name: str):
     p = projects.get(project_id)
-    if not p or not re.fullmatch(r"(clip_\d+\.(mp4|srt)|thumb_\d+\.jpg|poster\.jpg)", name) or not (p.dir / name).exists():
+    allowed = {"poster.jpg"}
+    if p:
+        allowed.update(
+            asset for clip in p.clips for asset in (clip.get("video"), clip.get("thumb"), clip.get("srt"), clip.get("ass"))
+            if isinstance(asset, str) and Path(asset).name == asset
+        )
+    if not p or name not in allowed or not (p.dir / name).is_file():
         raise HTTPException(404, "not found")
-    media_type = {"mp4": "video/mp4", "srt": "application/x-subrip", "jpg": "image/jpeg"}[name.rsplit(".", 1)[1]]
-    return FileResponse(p.dir / name, media_type=media_type, filename=f"clipy-{p.id}-{name}")
+    media_type = {"mp4": "video/mp4", "srt": "application/x-subrip", "jpg": "image/jpeg", "ass": "text/x-ssa"}.get(name.rsplit(".", 1)[-1].lower(), "application/octet-stream")
+    return FileResponse(p.dir / name, media_type=media_type, filename=name)
 
 
 @app.get("/api/projects/{project_id}/clip-sequence")

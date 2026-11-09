@@ -64,7 +64,7 @@ class ClipLayoutTests(unittest.TestCase):
                 self.assertGreater(image.getpixel((90, 160))[0], 200)
 
     def test_source_ratio_and_output_width_behavior(self):
-        self.assertEqual(media.clip_frame_size(180, 'auto', 16 / 9), (180, 102))
+        self.assertEqual(media.clip_frame_size(180, 'auto', 16 / 9, output_height=320), (180, 320))
         self.assertEqual(media.clip_frame_size(180, '1:1', 16 / 9), (180, 180))
         self.assertIn('crop=320:180', media.composed_reframe(320, 180, '3:4', 'black', 16 / 9))
 
@@ -91,7 +91,7 @@ class ClipLayoutTests(unittest.TestCase):
         self.assertGreater(min(pixel(300, 90)), 240)
         self.assertGreater(pixel(160, 90)[0], 200)
         self.assertLess(pixel(160, 90)[1], 20)
-        # Existing auto projects retain the former width-filling crop behavior.
+        # Auto now fills the selected output shape, while no-crop keeps the source.
         self.assertIn('crop=320:180', media.composed_reframe(320, 180, 'auto', 'white', 9 / 16))
 
     def test_five_four_settings_and_render(self):
@@ -111,7 +111,7 @@ class ClipLayoutTests(unittest.TestCase):
         common = {'ratio': '9:16', 'fit': 'crop', 'count': 4, 'max_duration': 60}
         old = ClipSettings(**common)
         new = ClipSettings(**common, clip_ratio='1:1', background='white')
-        self.assertIsNone(old.clip_ratio)
+        self.assertEqual((old.clip_ratio, old.background), ('auto', 'black'))
         self.assertEqual((new.clip_ratio, new.background), ('1:1', 'white'))
         with self.assertRaises(ValueError):
             ClipSettings(**common, clip_ratio='invalid', background='white')

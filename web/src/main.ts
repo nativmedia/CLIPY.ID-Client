@@ -489,7 +489,7 @@ async function useLastSettings(source: LocalSource, action: HTMLButtonElement, s
     if (s.mode === "filming" && s.film) {
       filmRatio.value = s.clip.ratio;
       setFilmCrop(s.film.source_ratio ?? "auto");
-      filmBackground.value = s.film.background ?? "blur";
+      filmBackground.value = s.film.background ?? "black";
       filmEpisodes.value = String(s.film.episodes);
       filmDuration.value = String(s.film.max_duration);
       if (filmDuration.selectedIndex === -1) filmDuration.selectedIndex = 0;
@@ -499,8 +499,8 @@ async function useLastSettings(source: LocalSource, action: HTMLButtonElement, s
     }
     setMood(s.mood ?? "auto");
     sel.ratio.value = s.clip.ratio;
-    setClipCrop(s.clip.clip_ratio ?? (s.clip.fit === "crop" ? s.clip.ratio : "none"));
-    clipBackground.value = s.clip.background ?? "blur";
+    setClipCrop(s.clip.clip_ratio ?? (s.clip.fit === "crop" ? "auto" : "none"));
+    clipBackground.value = s.clip.background ?? "black";
     sel.count.value = String(s.clip.count);
     sel.duration.value = String(s.clip.max_duration);
     sel.font.value = s.caption.font;
@@ -813,7 +813,7 @@ const clipBackground = $<HTMLSelectElement>("#opt-background");
 function setClipCrop(value: string) {
   clipRatio.querySelectorAll('option[data-legacy]').forEach(option => option.remove());
   if (![...clipRatio.options].some(option => option.value === value)) {
-    const option = new Option(value === "auto" ? "ukuran asli video (tersimpan)" : `${value} (tersimpan)`, value);
+    const option = new Option(value === "auto" ? "auto (output ratio) (tersimpan)" : `${value} (tersimpan)`, value);
     option.hidden = true;
     option.dataset.legacy = "true";
     clipRatio.add(option);
@@ -824,7 +824,7 @@ const filmSourceRatio = $<HTMLSelectElement>("#film-source-ratio");
 function setFilmCrop(value: string) {
   filmSourceRatio.querySelectorAll('option[data-legacy]').forEach(option => option.remove());
   if (![...filmSourceRatio.options].some(option => option.value === value)) {
-    const option = new Option(value === "auto" ? "ukuran asli video (tersimpan)" : `${value} (tersimpan)`, value);
+    const option = new Option(value === "auto" ? "auto (output ratio) (tersimpan)" : `${value} (tersimpan)`, value);
     option.hidden = true;
     option.dataset.legacy = "true";
     filmSourceRatio.add(option);
@@ -1280,7 +1280,8 @@ function resetAll(focus = true) {
   thumbText.value = "";
   thumbTextMode.value = "auto";
   filmDubSpeed.value = "1.0";
-  setClipCrop("none"); clipBackground.value = "blur";
+  setClipCrop("auto"); clipBackground.value = "black";
+  setFilmCrop("auto"); filmBackground.value = "black";
   filmEpisodes.value = filmEpisodes.defaultValue;
   clearVideoPreset();
   thumbNumber.value = "off";
@@ -1374,6 +1375,25 @@ const POSITION_NAMES: Record<string, string> = {
   tl: "top left", tc: "top", tr: "top right", ml: "left", mc: "center", mr: "right", bl: "bottom left", bc: "bottom", br: "bottom right",
 };
 
+function dashboardIcon() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 20 20");
+  svg.setAttribute("aria-hidden", "true");
+  // Two offset frames make this read as an open dashboard, not an external link.
+  const back = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  back.setAttribute("x", "3");
+  back.setAttribute("y", "2");
+  back.setAttribute("width", "12");
+  back.setAttribute("height", "12");
+  const front = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  front.setAttribute("x", "6");
+  front.setAttribute("y", "5");
+  front.setAttribute("width", "12");
+  front.setAttribute("height", "12");
+  svg.append(back, front);
+  return svg;
+}
+
 function projectCard(p: Project): HTMLLIElement {
   const s = p.settings;
   const running = !["done", "error", "cancelled"].includes(p.status);
@@ -1383,13 +1403,33 @@ function projectCard(p: Project): HTMLLIElement {
       : el("p", { className: `progress${running ? "" : " done"}`, textContent: running ? `${asciiBar(p.progress)} ${p.stage}` : `${p.clips.some((c) => c.status === "error") ? "selesai sebagian" : "done"} · ${p.clips.filter((c) => c.status === "done").length} clips` });
   const meta = mountProjectSettings({ project: p, label, colors: options?.colors ?? {}, positions: POSITION_NAMES });
 
-  // Thumbnail and title open the full editor for this project.
-  const cover = el("button", { type: "button", className: "project-open", title: "open in editor" }, el("img", { className: "project-thumb", src: p.thumbnail, alt: "" }));
-  const heading = el("button", { type: "button", className: "project-title", textContent: p.title || p.url, title: "open in editor" });
-  cover.addEventListener("click", () => openEditor(p.id));
-  heading.addEventListener("click", () => openEditor(p.id));
+  // Source media remains the title/thumbnail destination; dashboard gets its own explicit control.
+  const sourceTitle = p.title || p.url;
+  const sourceCover = el("img", { className: "project-thumb", src: p.thumbnail, alt: "" });
+  const openSource = async (control: HTMLElement) => {
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(p.id)}/source/open`, { method: "POST" });
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? `status ${response.status}`);
+    } catch (error) {
+      control.title = error instanceof Error ? error.message : String(error);
+    }
+  };
+  const cover = p.url
+    ? el("a", { className: "project-open", href: p.url, target: "_blank", rel: "noopener", title: "Buka video sumber di YouTube" }, sourceCover)
+    : el("button", { type: "button", className: "project-open", title: "Buka folder video sumber" }, sourceCover);
+  const heading = p.url
+    ? el("a", { className: "project-title", href: p.url, target: "_blank", rel: "noopener", textContent: sourceTitle, title: "Buka video sumber di YouTube" })
+    : el("button", { type: "button", className: "project-title", textContent: sourceTitle, title: "Buka folder video sumber" });
+  if (!p.url) {
+    cover.addEventListener("click", () => { void openSource(cover); });
+    heading.addEventListener("click", () => { void openSource(heading); });
+  }
+  const dashboard = el("button", { type: "button", className: "project-dashboard-open", title: "Buka dashboard project", ariaLabel: "Buka dashboard project" }, dashboardIcon());
+  dashboard.addEventListener("click", () => openEditor(p.id));
+  const headingRow = el("div", { className: "project-heading" }, heading, dashboard);
 
   const removable = p.status === "cancelled" || p.status === "error";
+  const hasProjectControl = running || removable;
   const control = el("button", { type: "button", className: "text-button project-control", textContent: removable ? "hapus" : p.status === "stopping" ? "menghentikan…" : "stop" });
   control.hidden = !running && !removable;
   control.disabled = p.status === "stopping";
@@ -1437,10 +1477,10 @@ function projectCard(p: Project): HTMLLIElement {
 
   return el(
     "li",
-    { className: "project" },
+    { className: `project${hasProjectControl ? " has-project-control" : ""}` },
     control,
     cover,
-    el("div", {}, el("h3", {}, heading), status, restartable && restart, meta),
+    el("div", {}, el("h3", {}, headingRow), status, restartable && restart, meta),
     p.clips.length > 0 && mountClipResults({ project: p, onPreview: openPreview, onRetry: retryClip, onRefresh: () => { void refreshProjects(); } }),
     filmConcatControls(p),
   );

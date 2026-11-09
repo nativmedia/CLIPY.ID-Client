@@ -40,11 +40,13 @@ class CropOptionsTests(unittest.TestCase):
         html = (Path(__file__).resolve().parents[2] / 'web/index.html').read_text(encoding='utf-8')
         parser.feed(html)
         self.assertEqual(parser.options['film-ratio'], RATIOS)
-        self.assertEqual(parser.options['film-source-ratio'], ['none', 'blackbar', *RATIOS])
+        self.assertEqual(parser.options['film-source-ratio'], ['auto', 'none', 'blackbar', *RATIOS])
         self.assertRegex(html, re.compile(r'<select id="film-source-ratio"[^>]*>.*?</select><span>crop clip</span>'))
+        self.assertEqual(parser.options['film-background'], ['black', 'white', 'blur'])
         if 'opt-clip-ratio' in parser.options:
-            self.assertEqual(parser.options['opt-clip-ratio'], ['none', 'blackbar', *RATIOS])
+            self.assertEqual(parser.options['opt-clip-ratio'], ['auto', 'none', 'blackbar', *RATIOS])
             self.assertRegex(html, re.compile(r'<select id="opt-clip-ratio"[^>]*>.*?</select><span>crop clip</span>'))
+            self.assertEqual(parser.options['opt-background'], ['black', 'white', 'blur'])
         self.assertEqual(list(media.RATIOS), RATIOS)
         for ratio in RATIOS:
             self.assertEqual(ClipSettings(ratio=ratio, fit='crop', count=1, max_duration=60).ratio, ratio)
@@ -54,6 +56,9 @@ class CropOptionsTests(unittest.TestCase):
             if 'clip_ratio' in ClipSettings.model_fields:
                 clip = ClipSettings(ratio='9:16', fit='crop', count=1, max_duration=60, clip_ratio=mode)
                 self.assertEqual(clip.clip_ratio, mode)
+        self.assertEqual(ClipSettings(ratio='9:16', fit='crop', count=1, max_duration=60).clip_ratio, 'auto')
+        self.assertEqual(ClipSettings(ratio='9:16', fit='crop', count=1, max_duration=60).background, 'black')
+        self.assertEqual(FilmSettings().background, 'black')
 
     def test_crop_modes_choose_the_right_detection(self):
         path = Path('example.mp4')

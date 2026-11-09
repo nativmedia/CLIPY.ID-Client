@@ -313,7 +313,7 @@ def _filming_graph(source_ratio, width, height, background, clip_ratio="auto", l
     else:
         active_ratio = source_ratio / (1 - 2 * letterbox / 360)
         source_crop = f"{media.letterbox_crop(letterbox)}," if letterbox else ""
-    ratio = active_ratio if clip_ratio in ("auto", "none", "blackbar") else int(clip_ratio.split(":")[0]) / int(clip_ratio.split(":")[1])
+    ratio = width / height if clip_ratio == "auto" else active_ratio if clip_ratio in ("none", "blackbar") else int(clip_ratio.split(":")[0]) / int(clip_ratio.split(":")[1])
     fg_width, fg_height = width, max(2, round(width / ratio / 2) * 2)
     if clip_ratio in ("none", "blackbar") and fg_height > height:
         fg_height = height
@@ -609,7 +609,7 @@ def render(p, clip, opts, config):
             inset = local_inset if local else media.crop_insets(src, crop_mode)
         else:
             inset = local_inset or media.crop_insets(src, crop_mode)
-        graph = _filming_graph(ratio, width, height, config.get("background", "blur"),
+        graph = _filming_graph(ratio, width, height, config.get("background", "black"),
                                config.get("source_ratio", "auto"), inset)
         graph += (f";[r]setpts={stretch:.8f}*(PTS-STARTPTS),fps={media.FPS},"
                   f"tpad=stop_mode=clone:stop={frames},trim=end_frame={frames},format=yuv420p[v]")
@@ -624,11 +624,11 @@ def render(p, clip, opts, config):
     if not _copy_episode(parts, frame_counts, concat, voice, draft, total_frames):
         af = "apad" if serial else "loudnorm=I=-16:TP=-2:LRA=11"
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(concat), "-i", str(voice), "-vf", f"setpts=N/({media.FPS}*TB)", "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264", "-preset", "fast", "-af", af, "-c:a", "aac", "-t", f"{total_frames / media.FPS:.6f}", "-movflags", "+faststart", str(draft)], check=True)
-    ass = d / f"film_{n}.ass"
+    ass = p.clip_asset_path(clip, "ass")
     ass.write_text(captions.build_ass(words, opts["style"], width, height), encoding="utf-8")
-    srt = d / f"clip_{n}.srt"
+    srt = p.clip_asset_path(clip, "srt")
     srt.write_text(captions.build_srt(words, opts["style"], width, height), encoding="utf-8")
-    out = d / f"clip_{n}.mp4"
+    out = p.clip_asset_path(clip, "mp4")
     media.render_clip(draft, ass, out, width, height, "crop", brand=opts["brand"], brand_position=opts["brand_position"])
     if media.probe_duration(out) > config["max_duration"]:
         out.unlink(missing_ok=True)
@@ -650,7 +650,7 @@ def render(p, clip, opts, config):
                      position=thumb_cfg.get("position"))
     if opts["brand"]:
         thumbs.add_brand(thumb, opts["brand"], opts["brand_position"], media.brand_margin(width, height))
-    clip.update(video=out.name, thumb=thumb.name, srt=srt.name, narration=narration)
+    clip.update(video=out.name, thumb=thumb.name, srt=srt.name, ass=ass.name, narration=narration)
     draft.unlink(missing_ok=True)
     for part in parts:
         part.unlink(missing_ok=True)
