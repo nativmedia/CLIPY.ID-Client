@@ -8,5 +8,6 @@
   font: 500 11px / 1.5 var(--mono);
 }
 .film-concat progress { width: 110px; accent-color: var(--accent); }
+.film-concat-download { margin-left: auto; }
 .film-concat-note { flex-basis: 100%; margin: 0; color: var(--fg-3); overflow-wrap: anywhere; }
 .film-concat-note.error { color: var(--error); }

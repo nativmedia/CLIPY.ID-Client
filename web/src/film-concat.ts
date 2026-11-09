@@ -18,7 +18,8 @@ export function filmConcatControls(project: Project): HTMLElement | null {
     numbered.every((clip, index) => clip.n === index + 1 && clip.status === "done" && !!clip.video);
   const endpoint = `/api/projects/${encodeURIComponent(project.id)}/film-sequence`;
   const button = el("button", { type: "button", className: "text-button", textContent: buttonLabel, disabled: true });
-  const download = el("a", { className: "text-button", href: `${endpoint}/download`, download: "", textContent: "Download hasil gabungan", hidden: true });
+  const download = el("a", { className: "text-button film-concat-download", href: `${endpoint}/download`, download: "", textContent: "download", hidden: true });
+  download.setAttribute("aria-label", "Download hasil gabungan");
   const progress = el("progress", { max: 1, value: 0, hidden: true });
   progress.setAttribute("aria-label", "Progres penggabungan clip");
   const note = el("p", { className: "film-concat-note", textContent: "", hidden: true });

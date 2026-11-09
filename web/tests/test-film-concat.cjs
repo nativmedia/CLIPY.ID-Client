@@ -61,6 +61,7 @@ test("completed clips show real progress and download after server completion", 
   assert.equal(progress.value, 0.75);
   await scheduled.shift()();
   assert.equal(download.hidden, false);
+  assert.equal(download.textContent, "download");
   assert.equal(button.textContent, "Gabungkan Clip 1-2");
   assert.match(download.href, /test-project\/film-sequence\/download$/);
   assert.equal(progress.hidden, true);

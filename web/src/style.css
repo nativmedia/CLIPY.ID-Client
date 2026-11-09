@@ -55,7 +55,7 @@
 /* ---------- theme switch (top left) ---------- */
 .theme-switch {
   position: fixed;
-  top: 14px;
+  top: 52px;
   left: 16px;
   z-index: 30;
   display: flex;
@@ -80,7 +80,7 @@
 .app-logo {
   position: fixed;
   top: 19px;
-  right: 20px;
+  left: 20px;
   z-index: 29;
   width: 116px;
   height: auto;
@@ -101,9 +101,6 @@
 }
 .desktop-settings-link:hover { border-color: var(--accent); color: var(--accent); }
 .desktop-settings-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-@media (min-width: 1320px) {
-  body:has(.projects-toggle:not([hidden])) .app-logo { display: none; }
-}
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -1158,7 +1155,8 @@ body.locked { overflow: hidden; }
   button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .stage, .projects { width: min(640px, calc(100% - 40px)); }
   .stage { padding-top: max(112px, calc(var(--band-top, 18vh) + 24px)); }
-  .theme-switch { top: max(12px, env(safe-area-inset-top)); left: max(20px, env(safe-area-inset-left)); gap: 8px; }
+  .app-logo { top: max(12px, env(safe-area-inset-top)); left: max(20px, env(safe-area-inset-left)); }
+  .theme-switch { top: calc(max(12px, env(safe-area-inset-top)) + 38px); left: max(20px, env(safe-area-inset-left)); gap: 8px; }
   .theme-switch button { min-height: 44px; padding: 10px 14px; font-size: 14px; letter-spacing: 0; }
   /* Preserve the desktop underline and keep the action beside the input. */
   .field { gap: 12px; flex-wrap: nowrap; padding: 0 0 8px; border: 0; background: transparent; }
