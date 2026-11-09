@@ -42,7 +42,10 @@ test("React project islands preserve settings, preview, retry and cleanup", asyn
       onRetry: async (id, n) => { retried = [id, n]; throw new Error("retry gagal"); }, onRefresh: () => {} }));
     document.body.append(card);
   });
-  assert.match(card.querySelector("dl").textContent, /YouTube · subtitle otomatis/);
+  assert.match(card.querySelector("dl").textContent, /YouTube transkrip/);
+  assert.match(card.querySelector("dl").textContent, /thumbnail/);
+  assert.match(card.querySelector("dl").textContent, /2 baris/);
+  assert.doesNotMatch(card.querySelector("dl").textContent, /info transkrip/);
   assert.match(card.querySelector("dl").textContent, /CLIPY.*60%.*bottom/);
   assert.equal(card.querySelectorAll("ol.clips > li").length, 2);
   await act(async () => card.querySelector(".link-title").click());

@@ -17,8 +17,8 @@ type SettingsProps = {
 export function ProjectSettings({ project: p, label, colors, positions }: SettingsProps) {
   const s = p.settings;
   const transcriptNames: Record<string, string> = {
-    youtube_manual: "YouTube · subtitle pembuat", youtube_auto: "YouTube · subtitle otomatis",
-    whisper: "Transkripsi lokal", srt: "Subtitle yang diunggah",
+    youtube_manual: "YouTube transkrip", youtube_auto: "YouTube transkrip",
+    whisper: "Lokal transkrip",
   };
   const b = s.brand;
   const brand = b && (p.has_logo || b.text)
@@ -26,11 +26,10 @@ export function ProjectSettings({ project: p, label, colors, positions }: Settin
     : "";
   return <>
     <dt>clip</dt><dd>{`${clipLayout(s)} · ${s.clip.count} clip${s.clip.count > 1 ? "s" : ""} · ≤${s.clip.max_duration}s`}</dd>
-    <dt>caption</dt><dd>{`${label("fonts", s.caption.font)} · ${label("animations", s.caption.animation)} · `}<span className="dot" style={{ background: colors[s.caption.color] ?? s.caption.color }} />{label("cases", s.caption.case)}</dd>
-    <dt>thumb</dt><dd>{`${s.thumb.source} · ${label("title_styles", s.thumb.title_style)}${s.mode === "filming" ? "" : ` · ${s.thumb.voice ? label("voices", s.thumb.voice).split(" · ")[0] : "no dub"}`}`}</dd>
-    {p.transcript_origin && <><dt>transkrip</dt><dd>{transcriptNames[p.transcript_origin] ?? p.transcript_origin}</dd></>}
+    <dt>caption</dt><dd>{`${label("fonts", s.caption.font)} · ${label("animations", s.caption.animation)} · ${s.caption.max_lines ?? 2} baris · `}<span className="dot" style={{ background: colors[s.caption.color] ?? s.caption.color }} />{label("cases", s.caption.case)}</dd>
+    <dt>thumbnail</dt><dd>{`${s.thumb.source} · ${label("title_styles", s.thumb.title_style)}${s.mode === "filming" ? "" : ` · ${s.thumb.voice ? label("voices", s.thumb.voice).split(" · ")[0] : "no dub"}`}`}</dd>
+    {p.transcript_origin && transcriptNames[p.transcript_origin] && <><dt>transkrip</dt><dd>{transcriptNames[p.transcript_origin]}</dd></>}
     {p.transcription_backend && <><dt>perangkat</dt><dd>{p.transcription_backend}</dd></>}
-    {p.transcript_note && p.transcript_origin !== "srt" && <><dt>info transkrip</dt><dd>{p.transcript_note}</dd></>}
     {p.transcription_note && <><dt>info perangkat</dt><dd>{p.transcription_note}</dd></>}
     {brand && b && <><dt>brand</dt><dd>{`${brand} · ${b.opacity ?? 100}% · ${positions[b.position] ?? b.position}`}</dd></>}
   </>;

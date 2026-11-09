@@ -65,7 +65,7 @@ test("completed clips show real progress and download after server completion", 
   assert.equal(calls[1][1].method, "POST");
 });
 
-test("unfinished or failed clips prevent combining and explain what to do", async () => {
+test("unfinished or failed clips prevent combining without a description", async () => {
   const controller = await loadController();
   const scheduled = [];
   global.window = { setTimeout: (fn) => scheduled.push(fn) };
@@ -75,7 +75,8 @@ test("unfinished or failed clips prevent combining and explain what to do", asyn
   await scheduled.shift()();
   assert.equal(button.disabled, true);
   assert.equal(download.hidden, true);
-  assert.match(note.textContent, /Selesaikan atau ulangi/);
+  assert.equal(note.hidden, true);
+  assert.equal(controller(film({ clips: [] })), null);
 });
 
 test("backend incompatibility is shown without offering a download", async () => {

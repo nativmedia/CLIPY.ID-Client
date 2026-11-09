@@ -9,7 +9,7 @@ type SequenceStatus = {
 
 /** Controls for joining the finished Filming clips without changing the originals. */
 export function filmConcatControls(project: Project): HTMLElement | null {
-  if (project.settings.mode !== "filming") return null;
+  if (project.settings.mode !== "filming" || project.clips.length === 0) return null;
 
   const expected = project.settings.film?.episodes ?? project.settings.clip.count;
   const numbered = [...project.clips].sort((a, b) => a.n - b.n);
@@ -20,20 +20,21 @@ export function filmConcatControls(project: Project): HTMLElement | null {
   const download = el("a", { className: "text-button", href: `${endpoint}/download`, download: "", textContent: "Download hasil gabungan", hidden: true });
   const progress = el("progress", { max: 1, value: 0, hidden: true });
   progress.setAttribute("aria-label", "Progres penggabungan clip");
-  const note = el("p", { className: "film-concat-note", textContent: ready ? "Memeriksa status penggabungan…" : "Selesaikan atau ulangi clip yang belum selesai atau gagal sebelum menggabungkan." });
+  const note = el("p", { className: "film-concat-note", textContent: "", hidden: true });
   note.setAttribute("role", "status");
   note.setAttribute("aria-live", "polite");
   const wrap = el("div", { className: "film-concat" }, button, download, progress, note);
 
   function showStatus(data: SequenceStatus) {
     const running = data.status === "running";
+    note.hidden = !running && data.status !== "error";
     button.disabled = !ready || running;
     button.textContent = running ? "Menggabungkan…" : "Gabungkan clip";
     download.hidden = !ready || data.status !== "done";
     progress.hidden = !running;
     if (running) progress.value = Math.max(0, Math.min(1, Number.isFinite(data.progress) ? data.progress : 0));
     if (!ready) {
-      note.textContent = "Selesaikan atau ulangi clip yang belum selesai atau gagal sebelum menggabungkan.";
+      note.textContent = "";
     } else if (running) {
       note.textContent = `${data.message || "Menggabungkan clip"} · ${Math.round(progress.value * 100)}%`;
     } else if (data.status === "done") {
@@ -41,7 +42,7 @@ export function filmConcatControls(project: Project): HTMLElement | null {
     } else if (data.status === "error") {
       note.textContent = data.message || "Penggabungan gagal. Periksa format clip lalu coba lagi.";
     } else {
-      note.textContent = data.message || "Gabungkan seluruh clip sesuai urutan tanpa thumbnail.";
+      note.textContent = "";
     }
     note.classList.toggle("error", data.status === "error");
   }
@@ -58,6 +59,7 @@ export function filmConcatControls(project: Project): HTMLElement | null {
     } catch {
       if (!wrap.isConnected) return;
       button.disabled = true;
+      note.hidden = false;
       note.textContent = "Status penggabungan tidak dapat diperiksa. Menghubungkan kembali…";
       window.setTimeout(updateStatus, 5000);
     }
@@ -65,6 +67,7 @@ export function filmConcatControls(project: Project): HTMLElement | null {
 
   button.addEventListener("click", async () => {
     button.disabled = true;
+    note.hidden = false;
     note.textContent = "Menyiapkan penggabungan…";
     try {
       const response = await fetch(endpoint, { method: "POST" });
