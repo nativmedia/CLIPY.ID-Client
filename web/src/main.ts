@@ -1,5 +1,7 @@
 import { Marquee } from "./marquee";
-import { clipLayout, el, openEditor, openPreview, retryClip, type Clip, type Project } from "./editor";
+import { el, openEditor, openPreview, retryClip, type Project } from "./editor";
+import { disposeProjectIslands, mountClipResults, mountProjectSettings } from "./project-components";
+import { filmConcatControls } from "./film-concat";
 import { previewSelect } from "./option-preview";
 
 new Marquee(document.querySelector<HTMLCanvasElement>(".backdrop")!);
@@ -1347,68 +1349,6 @@ const POSITION_NAMES: Record<string, string> = {
   tl: "top left", tc: "top", tr: "top right", ml: "left", mc: "center", mr: "right", bl: "bottom left", bc: "bottom", br: "bottom right",
 };
 
-/**
- * On hover, scroll a cut-off title across its row (and back) so the whole of it can be read.
- * The text moves inside its own clipping box, so it never slides over the ▸ before it.
- */
-function readable(name: HTMLElement) {
-  const label = name.textContent ?? "";
-  const original = el("span", { className: "title-original", textContent: label });
-  const copy = el("span", { className: "title-copy", textContent: label });
-  copy.setAttribute("aria-hidden", "true");
-  const text = el("span", { className: "scroll" }, original, copy);
-  const box = el("span", { className: "clip-box" }, text);
-  name.replaceChildren(box);
-  name.addEventListener("mouseenter", () => {
-    // The box clips its overflow, so its scrollWidth is the title's full width.
-    const hidden = original.getBoundingClientRect().width - box.clientWidth;
-    if (hidden <= 2) return;
-    const distance = original.getBoundingClientRect().width + 32;
-    name.style.setProperty("--read-shift", `${-distance}px`);
-    name.style.setProperty("--read-time", `${Math.max(8, distance / 22)}s`);
-    name.classList.add("reading");
-  });
-  name.addEventListener("mouseleave", () => name.classList.remove("reading"));
-  return name;
-}
-
-function clipRow(p: Project, c: Clip): HTMLLIElement {
-  const name = readable(
-    c.video
-      ? el("button", { type: "button", className: "t link-title", textContent: c.title, title: `preview · ${c.title}` })
-      : el("span", { className: "t", textContent: c.title, title: c.title }),
-  );
-  if (c.video) name.addEventListener("click", () => openPreview(p, c));
-
-  let action: HTMLElement;
-  const running = !["done", "error", "cancelled"].includes(p.status);
-  const errorText = c.error?.includes("name 'film' is not defined") ? "Kesalahan pembacaan rasio video" : c.error;
-  const message = el("span", { className: "clip-error", textContent: errorText || "Klip gagal diproses" });
-  message.setAttribute("role", "status");
-  if (c.status === "error" && running) {
-    action = el("span", { className: "state", textContent: "tunggu selesai" });
-  } else if (c.status === "error" && p.status !== "cancelled") {
-    action = el("button", { type: "button", className: "text-button warn", textContent: "retry", title: c.error ?? "" });
-    action.addEventListener("click", async () => {
-      (action as HTMLButtonElement).disabled = true;
-      action.textContent = "retrying…";
-      try {
-        await retryClip(p.id, c.n);
-        refreshProjects();
-      } catch (err) {
-        action.textContent = "retry";
-        (action as HTMLButtonElement).disabled = false;
-        message.textContent = (err as Error).message;
-      }
-    });
-  } else if (c.video) {
-    action = el("a", { className: "text-button", href: c.video, download: "", textContent: "download" });
-  } else {
-    action = el("span", { className: "state", textContent: p.status === "cancelled" ? "dihentikan" : c.status });
-  }
-  return el("li", { className: c.status === "error" ? "has-error" : "" }, el("span", { className: "n", textContent: String(c.n).padStart(2, "0") }), name, action, c.status === "error" ? message : null);
-}
-
 function projectCard(p: Project): HTMLLIElement {
   const s = p.settings;
   const running = !["done", "error", "cancelled"].includes(p.status);
@@ -1416,28 +1356,7 @@ function projectCard(p: Project): HTMLLIElement {
     p.status === "cancelled" ? el("p", { className: "progress", textContent: "dihentikan" }) : p.status === "error"
       ? el("p", { className: "progress error", textContent: `failed · ${p.error ?? "unknown error"}` })
       : el("p", { className: `progress${running ? "" : " done"}`, textContent: running ? `${asciiBar(p.progress)} ${p.stage}` : `${p.clips.some((c) => c.status === "error") ? "selesai sebagian" : "done"} · ${p.clips.filter((c) => c.status === "done").length} clips` });
-  const dot = el("span", { className: "dot" });
-  dot.style.background = options?.colors[s.caption.color] ?? s.caption.color;
-  const meta = el(
-    "dl",
-    {},
-    el("dt", { textContent: "clip" }),
-    el("dd", { textContent: `${clipLayout(s)} · ${s.clip.count} clip${s.clip.count > 1 ? "s" : ""} · ≤${s.clip.max_duration}s` }),
-    el("dt", { textContent: "caption" }),
-    el("dd", {}, `${label("fonts", s.caption.font)} · ${label("animations", s.caption.animation)} · `, dot, label("cases", s.caption.case)),
-    el("dt", { textContent: "thumb" }),
-    el("dd", { textContent: `${s.thumb.source} · ${label("title_styles", s.thumb.title_style)}${s.mode === "filming" ? "" : ` · ${s.thumb.voice ? label("voices", s.thumb.voice).split(" · ")[0] : "no dub"}`}` }),
-  );
-  const transcriptNames: Record<string, string> = { youtube_manual: 'YouTube · subtitle pembuat', youtube_auto: 'YouTube · subtitle otomatis', whisper: 'Transkripsi lokal', srt: 'Subtitle yang diunggah' };
-  if (p.transcript_origin) meta.append(el('dt', { textContent: 'transkrip' }), el('dd', { textContent: transcriptNames[p.transcript_origin] ?? p.transcript_origin }));
-  if (p.transcription_backend) meta.append(el('dt', { textContent: 'perangkat' }), el('dd', { textContent: p.transcription_backend }));
-  if (p.transcript_note && p.transcript_origin !== 'srt') meta.append(el('dt', { textContent: 'info transkrip' }), el('dd', { textContent: p.transcript_note }));
-  if (p.transcription_note) meta.append(el('dt', { textContent: 'info perangkat' }), el('dd', { textContent: p.transcription_note }));
-  const b = s.brand;
-  if (b && (p.has_logo || b.text)) {
-    const what = [p.has_logo ? "logo" : "", b.text ? `"${b.text}"${b.style ? ` ${label("brand_styles", b.style)}` : ""}` : ""].filter(Boolean).join(" + ");
-    meta.append(el("dt", { textContent: "brand" }), el("dd", { textContent: `${what} · ${b.opacity ?? 100}% · ${POSITION_NAMES[b.position] ?? b.position}` }));
-  }
+  const meta = mountProjectSettings({ project: p, label, colors: options?.colors ?? {}, positions: POSITION_NAMES });
 
   // Thumbnail and title open the full editor for this project.
   const cover = el("button", { type: "button", className: "project-open", title: "open in editor" }, el("img", { className: "project-thumb", src: p.thumbnail, alt: "" }));
@@ -1462,7 +1381,9 @@ function projectCard(p: Project): HTMLLIElement {
         const stopped: Project = await response.json();
         const node = projectCard(stopped);
         projectCards.set(stopped.id, { signature: JSON.stringify(stopped), node });
-        control.closest(".project")?.replaceWith(node);
+        const previous = control.closest(".project");
+        previous?.replaceWith(node);
+        if (previous) disposeProjectIslands(previous);
       }
       await refreshProjects();
     } catch (err) {
@@ -1495,7 +1416,8 @@ function projectCard(p: Project): HTMLLIElement {
     control,
     cover,
     el("div", {}, el("h3", {}, heading), status, restartable && restart, meta),
-    p.clips.length > 0 && el("ol", { className: "clips" }, ...p.clips.map((c) => clipRow(p, c))),
+    p.clips.length > 0 && mountClipResults({ project: p, onPreview: openPreview, onRetry: retryClip, onRefresh: () => { void refreshProjects(); } }),
+    filmConcatControls(p),
   );
 }
 
@@ -1523,7 +1445,11 @@ async function refreshProjects() {
       cards.forEach((node, i) => {
         if (projectList.children[i] !== node) projectList.insertBefore(node, projectList.children[i] ?? null);
       });
-      while (projectList.children.length > cards.length) projectList.lastElementChild!.remove();
+      while (projectList.children.length > cards.length) {
+        const removed = projectList.lastElementChild!;
+        removed.remove();
+        disposeProjectIslands(removed);
+      }
     }
     for (const id of projectCards.keys()) if (!list.some((p) => p.id === id)) projectCards.delete(id);
     const active = list.some((p) => !["done", "error", "cancelled"].includes(p.status));

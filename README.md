@@ -6,7 +6,7 @@ Repository ini khusus untuk **Client** (antarmuka web dan backend pemrosesan vid
 
 ## Menjalankan di Windows
 
-Diperlukan Python, Node.js, serta FFmpeg dan FFprobe di `PATH`.
+Diperlukan Python, Node.js 24.15+ atau 26+, serta FFmpeg dan FFprobe di `PATH`.
 
 1. Jalankan backend API dari folder `server` (port **4748**):
 
@@ -26,3 +26,22 @@ Diperlukan Python, Node.js, serta FFmpeg dan FFprobe di `PATH`.
    ```
 
 3. Buka **http://127.0.0.1:4747**, masukkan API key, dan pilih sumber video.
+
+Untuk memeriksa komponen frontend, jalankan `npm test` dan `npm run typecheck` di folder `web`.
+
+## Memperbarui PWA melalui terminal
+
+Hentikan proses frontend dan backend setelah pekerjaan video selesai. Dari folder
+repository client, ambil pembaruan dengan `git pull --ff-only`, lalu jalankan
+`npm ci` di folder `web` dan `.\.venv\Scripts\python.exe -m pip install -r requirements.txt`
+di folder `server`. Setelah selesai, jalankan kembali backend dan frontend seperti
+petunjuk di atas. Data lokal, model, pengaturan, dan lisensi tidak perlu dihapus.
+
+## Gabungkan hasil Filming
+
+Setelah seluruh clip Filming selesai, gunakan **Gabungkan clip** pada hasil
+proyek. Aplikasi menyusun clip berdasarkan nomor dengan audio dan caption yang
+ada pada masing-masing video, tanpa thumbnail. Hasil gabungan dapat diunduh dan
+clip satuan tetap tersedia. Penggabungan menggunakan FFmpeg stream copy agar
+tidak merender ulang; jika format antar-clip tidak kompatibel, aplikasi akan
+menjelaskan penyebabnya dan clip perlu diperbaiki sebelum dicoba kembali.

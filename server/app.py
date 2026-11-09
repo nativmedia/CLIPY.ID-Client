@@ -39,7 +39,7 @@ from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from clipy import captions, keys, media, projects, social, thumbs, tts, uploads
+from clipy import captions, film_sequence, keys, media, projects, social, thumbs, tts, uploads
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -534,6 +534,37 @@ def clip_sequence(project_id: str):
         if directory:
             shutil.rmtree(directory, ignore_errors=True)
         raise HTTPException(500, f"Gagal membuat clip sequence: {e}") from e
+
+
+@app.post("/api/projects/{project_id}/film-sequence")
+def start_film_sequence(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    try:
+        return film_sequence.start(p)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.get("/api/projects/{project_id}/film-sequence")
+def get_film_sequence(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    return film_sequence.status(p)
+
+
+@app.get("/api/projects/{project_id}/film-sequence/download")
+def download_film_sequence(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    try:
+        output = film_sequence.download(p)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return FileResponse(output, media_type="video/mp4", filename=f"clipy-{p.id}-gabungan.mp4")
 
 
 @app.get("/api/projects/{project_id}/assets/{kind}")
