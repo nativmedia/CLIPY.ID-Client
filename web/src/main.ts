@@ -1,5 +1,5 @@
 import { Marquee } from "./marquee";
-import { el, openEditor, openPreview, retryClip, sequenceLink, type Clip, type Project } from "./editor";
+import { clipLayout, el, openEditor, openPreview, retryClip, type Clip, type Project } from "./editor";
 import { previewSelect } from "./option-preview";
 
 new Marquee(document.querySelector<HTMLCanvasElement>(".backdrop")!);
@@ -187,7 +187,7 @@ async function show(id: string) {
     button.disabled = !ready();
     progress();
   } catch (err) {
-    if ((err as Error).name === "AbortError") return;
+    if ((err as Error).name === "AbortError" || current?.kind !== "youtube" || current.id !== id) return;
     clear();
     setHint(hint, "video not found or private", true);
   }
@@ -252,13 +252,15 @@ async function showFile(file: File) {
   });
   xhr.addEventListener("load", () => {
     if (current !== source) return;
-    const data = JSON.parse(xhr.responseText || "{}");
-    if (xhr.status !== 200) {
+    let data: {id?: string; duration?: number; detail?: string};
+    try { data = JSON.parse(xhr.responseText || "{}"); }
+    catch { setHint(hint, "upload failed: respons server tidak valid", true); return; }
+    if (xhr.status !== 200 || typeof data.id !== "string" || !Number.isFinite(data.duration)) {
       setHint(hint, `upload failed: ${data.detail ?? xhr.status}`, true);
       return;
     }
     source.uploadId = data.id;
-    const secs = Math.round(data.duration);
+    const secs = Math.round(data.duration!);
     setHint(hint, `uploaded · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`);
     button.disabled = !ready();
     progress();
@@ -382,7 +384,7 @@ function useSource(s: LocalSource) {
 }
 
 async function openLibrary() {
-  libraryVersion++;
+  const version = ++libraryVersion;
   setHint(libraryHint, mode === "filming" ? "pilih video sebagai sumber filming" : "videos clipped before · pick one to clip it again with new moments");
   library.hidden = false;
   document.body.classList.add("locked");
@@ -391,6 +393,7 @@ async function openLibrary() {
     const res = await fetch("/api/sources");
     if (!res.ok) throw new Error(`status ${res.status}`);
     const list: LocalSource[] = await res.json();
+    if (version !== libraryVersion || library.hidden) return;
     if (!list.length) {
       libraryList.replaceChildren(el("li", { className: "library-empty", textContent: "nothing here yet · clip a video first" }));
       return;
@@ -419,7 +422,7 @@ async function openLibrary() {
       }),
     );
   } catch (err) {
-    libraryList.replaceChildren(el("li", { className: "library-empty", textContent: `can't load the list (${(err as Error).message})` }));
+    if (version === libraryVersion && !library.hidden) libraryList.replaceChildren(el("li", { className: "library-empty", textContent: `can't load the list (${(err as Error).message})` }));
   }
 }
 
@@ -438,16 +441,17 @@ async function useLastSettings(source: LocalSource, action: HTMLButtonElement, s
     const project: Project = await projectResponse.json();
     const savedMode = project.settings.mode === "filming" && project.settings.film ? "filming" : "clipping";
     const key: KeyState = await keyResponse.json();
-    async function savedFile(kind: "logo" | "image") {
+    async function savedFile(kind: "logo" | "image" | "music") {
       const response = await fetch(`/api/projects/${settingsProject}/assets/${kind}`);
       if (!response.ok) throw new Error(`The saved ${kind} is unavailable. Open the video and choose it again.`);
       const blob = await response.blob();
-      const extension = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
+      const extension = kind === "music" ? (project.music?.split(".").pop() ?? "mp3") : blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
       return new File([blob], `last-${kind}.${extension}`, { type: blob.type });
     }
-    const [image, logo] = await Promise.all([
+    const [image, logo, music] = await Promise.all([
       project.settings.thumb.source === "upload" ? savedFile("image") : null,
       project.has_logo ? savedFile("logo") : null,
+      project.music ? savedFile("music") : null,
     ]);
     if (version !== libraryVersion || library.hidden) return;
     if (mode !== savedMode) document.querySelector<HTMLButtonElement>(`.mode-select button[data-mode="${savedMode}"]`)?.click();
@@ -455,21 +459,22 @@ async function useLastSettings(source: LocalSource, action: HTMLButtonElement, s
     useSource(source);
     const s = project.settings;
     const savedSpeed = (s.clip.dubbing_speed ?? 1).toFixed(1);
-    filmDubSpeed.value = clipDubSpeed.value = savedSpeed;
+    if (savedMode === "filming") filmDubSpeed.value = savedSpeed;
     if (s.mode === "filming" && s.film) {
       filmRatio.value = s.clip.ratio;
-      filmSourceRatio.value = s.film.source_ratio ?? "auto";
+      setFilmCrop(s.film.source_ratio ?? "auto");
       filmBackground.value = s.film.background ?? "blur";
       filmEpisodes.value = String(s.film.episodes);
       filmDuration.value = String(s.film.max_duration);
       if (filmDuration.selectedIndex === -1) filmDuration.selectedIndex = 0;
       filmVoice.value = s.film.voice;
       filmStyle.value = s.film.style;
-      filmStoryMode.value = s.film.story_mode ?? "standalone";
       filmPrompt.value = s.film.additional_prompt ?? "";
     }
     setMood(s.mood ?? "auto");
-    sel.ratio.value = `${s.clip.ratio}|${s.clip.fit}`;
+    sel.ratio.value = s.clip.ratio;
+    setClipCrop(s.clip.clip_ratio ?? (s.clip.fit === "crop" ? s.clip.ratio : "none"));
+    clipBackground.value = s.clip.background ?? "blur";
     sel.count.value = String(s.clip.count);
     sel.duration.value = String(s.clip.max_duration);
     sel.font.value = s.caption.font;
@@ -485,6 +490,7 @@ async function useLastSettings(source: LocalSource, action: HTMLButtonElement, s
     sel.source.value = s.thumb.source;
     sel.titleStyle.value = s.thumb.title_style;
     thumbText.value = s.thumb.text ?? "";
+    thumbTextMode.value = s.thumb.text_mode ?? (thumbText.value ? "manual" : s.thumb.title_style === "none" ? "none" : "auto");
     thumbNumber.value = s.thumb.sequence ?? (s.thumb.numbered ? "number" : "off");
     sel.voice.value = s.thumb.voice ?? "none";
     function restoreFile(input: HTMLInputElement, file: File | null) {
@@ -497,6 +503,9 @@ async function useLastSettings(source: LocalSource, action: HTMLButtonElement, s
     }
     restoreFile(imageInput, image);
     restoreFile(logoInput, logo);
+    restoreFile(musicInput, music);
+    musicStartWanted = Math.max(0, s.music_start ?? 0);
+    updateMusicRange();
     imagePick.hidden = sel.source.value !== "upload";
     brandText.value = s.brand?.text ?? "";
     brandStyle.value = s.brand?.style ?? BRAND_DEFAULTS.style;
@@ -585,6 +594,140 @@ const sel = {
 const swatches = $<HTMLDivElement>("#opt-color");
 const imageInput = $<HTMLInputElement>("#opt-image");
 const imagePick = $<HTMLButtonElement>("#opt-image-pick");
+const musicInput = $<HTMLInputElement>("#opt-music");
+const musicUrl = $<HTMLInputElement>("#opt-music-url");
+const musicPreview = $<HTMLElement>("#music-preview");
+const musicAudio = $<HTMLAudioElement>("#music-audio");
+const musicPlay = $<HTMLButtonElement>("#music-play");
+const musicWave = $<HTMLCanvasElement>("#music-wave");
+const musicRange = $<HTMLInputElement>("#music-start");
+const musicSelection = $<HTMLElement>("#music-selection");
+const musicTimes = $<HTMLElement>("#music-times");
+const musicError = $<HTMLElement>("#music-error");
+const musicPick = $<HTMLButtonElement>("#opt-music-pick");
+const musicName = $<HTMLElement>("#opt-music-name");
+const musicRemove = $<HTMLButtonElement>("#opt-music-remove");
+let musicObjectUrl = "", musicSource = "";
+let musicVersion = 0, musicDuration = 0, musicStartWanted = 0;
+let musicReady: Promise<void> | null = null;
+function musicWindowLength() {
+  const chosen = Number(mode === "filming" ? filmDuration.value : sel.duration.value);
+  return Number.isFinite(chosen) && chosen > 0 ? chosen : 0;
+}
+function musicClock(seconds: number) {
+  const total = Math.floor(seconds);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+function updateMusicRange() {
+  const length = musicWindowLength();
+  if (!musicDuration || !length) {
+    musicRange.disabled = true; musicSelection.hidden = true;
+    musicTimes.textContent = musicDuration ? "pilih duration" : "";
+    return;
+  }
+  const windowLength = Math.min(length, musicDuration);
+  const maxStart = Math.max(0, musicDuration - windowLength);
+  musicStartWanted = Math.min(maxStart, Math.max(0, musicStartWanted));
+  musicRange.max = String(maxStart); musicRange.value = String(musicStartWanted);
+  musicRange.disabled = maxStart === 0;
+  musicSelection.hidden = false;
+  musicSelection.style.left = `${musicStartWanted / musicDuration * 100}%`;
+  musicSelection.style.width = `${windowLength / musicDuration * 100}%`;
+  musicTimes.textContent = `${musicClock(musicStartWanted)} – ${musicClock(musicStartWanted + windowLength)}`;
+}
+function updateMusicPreview() {
+  musicVersion++; musicDuration = 0; musicStartWanted = 0; musicReady = null;
+  musicAudio.pause(); musicAudio.removeAttribute("src"); musicAudio.load();
+  if (musicObjectUrl) URL.revokeObjectURL(musicObjectUrl);
+  musicObjectUrl = musicInput.files?.[0] ? URL.createObjectURL(musicInput.files[0]) : "";
+  musicSource = musicObjectUrl || musicUrl.value.trim();
+  musicPreview.hidden = !musicSource;
+  musicPlay.textContent = "▶"; musicPlay.setAttribute("aria-label", "Putar musik");
+  musicWave.getContext("2d")?.clearRect(0, 0, musicWave.width, musicWave.height);
+  musicError.textContent = ""; updateMusicRange();
+}
+async function prepareMusic() {
+  if (!musicSource) return;
+  if (musicReady) return musicReady;
+  const version = musicVersion;
+  const task = (async () => {
+    try {
+      if (!musicObjectUrl && musicUrl.value.trim()) {
+        musicError.textContent = "menyiapkan musik…";
+        const form = new FormData(); form.append("url", musicUrl.value.trim());
+        const response = await fetch("/api/music/preview", { method: "POST", body: form });
+        if (!response.ok) {
+          const problem = await response.json().catch(() => ({}));
+          throw new Error(typeof problem.detail === "string" ? problem.detail : "Musik tidak dapat disiapkan.");
+        }
+        const blob = await response.blob();
+        if (version !== musicVersion) return;
+        musicObjectUrl = URL.createObjectURL(blob); musicSource = musicObjectUrl;
+      }
+      const response = await fetch(musicSource);
+      if (!response.ok) throw new Error("Musik tidak dapat dibaca.");
+      const length = Number(response.headers.get("content-length") || 0);
+      if (length > 100 * 1024 * 1024) throw new Error("Ukuran musik maksimal 100 MB.");
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength > 100 * 1024 * 1024) throw new Error("Ukuran musik maksimal 100 MB.");
+      const audioContext = new AudioContext();
+      let buffer: AudioBuffer;
+      try { buffer = await audioContext.decodeAudioData(bytes); } finally { await audioContext.close(); }
+      if (version !== musicVersion) return;
+      musicDuration = buffer.duration; musicAudio.src = musicSource;
+      const samples = buffer.getChannelData(0), ctx = musicWave.getContext("2d");
+      if (ctx) {
+        ctx.clearRect(0, 0, musicWave.width, musicWave.height);
+        ctx.fillStyle = getComputedStyle(musicWave).color;
+        const bars = 100, step = Math.max(1, Math.floor(samples.length / bars));
+        for (let i = 0; i < bars; i++) {
+          let peak = 0;
+          for (let j = i * step; j < Math.min(samples.length, (i + 1) * step); j += Math.max(1, Math.floor(step / 128))) peak = Math.max(peak, Math.abs(samples[j]));
+          const height = Math.max(2, peak * musicWave.height);
+          ctx.fillRect(i * musicWave.width / bars, (musicWave.height - height) / 2, 3, height);
+        }
+      }
+      musicError.textContent = ""; updateMusicRange();
+    } catch (error) {
+      if (version === musicVersion) { musicError.textContent = (error as Error).message || "Musik tidak dapat disiapkan."; musicReady = null; }
+    }
+  })();
+  musicReady = task;
+  return task;
+}
+musicUrl.addEventListener("input", () => { if (musicUrl.value.trim()) { musicInput.value = ""; musicName.textContent = ""; musicRemove.hidden = true; } updateMusicPreview(); progress(); });
+musicUrl.addEventListener("change", () => { if (musicUrl.validity.valid) void prepareMusic(); });
+musicRange.addEventListener("input", () => { musicStartWanted = Number(musicRange.value); updateMusicRange(); if (musicAudio.readyState > 0) musicAudio.currentTime = musicStartWanted; });
+musicAudio.addEventListener("timeupdate", () => {
+  const length = musicWindowLength();
+  if (length && musicAudio.currentTime >= Math.min(musicDuration, musicStartWanted + length)) {
+    musicAudio.pause(); musicAudio.currentTime = musicStartWanted;
+    musicPlay.textContent = "▶"; musicPlay.setAttribute("aria-label", "Putar musik");
+  }
+});
+musicAudio.addEventListener("ended", () => { musicPlay.textContent = "▶"; musicPlay.setAttribute("aria-label", "Putar musik"); });
+musicPlay.addEventListener("click", async () => {
+  if (!musicAudio.paused) { musicAudio.pause(); musicPlay.textContent = "▶"; musicPlay.setAttribute("aria-label", "Putar musik"); return; }
+  const version = musicVersion;
+  musicPlay.disabled = true;
+  try {
+    await prepareMusic();
+    if (version !== musicVersion || !musicDuration) return;
+    if (musicAudio.currentTime < musicStartWanted || musicAudio.currentTime >= musicStartWanted + (musicWindowLength() || musicDuration)) musicAudio.currentTime = musicStartWanted;
+    await musicAudio.play();
+    musicPlay.textContent = "❚❚"; musicPlay.setAttribute("aria-label", "Jeda musik");
+  } catch { musicError.textContent = "Musik tidak dapat diputar."; }
+  finally { musicPlay.disabled = false; }
+});
+musicPick.addEventListener("click", () => musicInput.click());
+musicInput.addEventListener("change", () => {
+  musicName.textContent = musicInput.files?.[0]?.name ?? "";
+  if (musicInput.files?.length) musicUrl.value = "";
+  musicRemove.hidden = !musicInput.files?.length;
+  updateMusicPreview();
+  if (musicInput.files?.length) void prepareMusic();
+});
+musicRemove.addEventListener("click", () => { musicInput.value = ""; musicInput.dispatchEvent(new Event("change")); });
 const logoInput = $<HTMLInputElement>("#opt-logo");
 const logoPick = $<HTMLButtonElement>("#opt-logo-pick");
 const logoPreview = $<HTMLImageElement>("#opt-logo-preview");
@@ -600,9 +743,16 @@ const captionLines = $<HTMLSelectElement>("#opt-caption-lines");
 const captionLinesPick = $<HTMLElement>("#caption-lines-pick");
 const captionMode = $<HTMLSelectElement>("#opt-caption-mode");
 const thumbFrame = $<HTMLDivElement>("#opt-thumb-position");
+// Match the music columns to the thumbnail grid as its position frame changes size.
+const thumbPositionColumn = thumbFrame.parentElement!;
+new ResizeObserver(() => {
+  const width = thumbPositionColumn.getBoundingClientRect().width;
+  if (width > 0) document.documentElement.style.setProperty("--thumb-position-width", `${width}px`);
+}).observe(thumbPositionColumn);
 let thumbPosition = "bc";
 const thumbNumber = $<HTMLSelectElement>("#opt-thumb-number");
 const thumbText = $<HTMLInputElement>("#opt-thumb-text");
+const thumbTextMode = $<HTMLSelectElement>("#opt-thumb-text-mode");
 const logoName = $<HTMLSpanElement>("#opt-logo-name");
 const positionFrame = $<HTMLDivElement>("#opt-position");
 const brandText = $<HTMLInputElement>("#opt-brand-text");
@@ -631,17 +781,37 @@ const markedFields = new Set<HTMLElement>();
 let apiKeyReady = false;
 let mood = "auto";
 let mode: "clipping" | "filming" = "clipping";
+const clipRatio = $<HTMLSelectElement>("#opt-clip-ratio");
+const clipBackground = $<HTMLSelectElement>("#opt-background");
+// Older projects may use a crop that is no longer offered for new projects.
+function setClipCrop(value: string) {
+  clipRatio.querySelectorAll('option[data-legacy]').forEach(option => option.remove());
+  if (![...clipRatio.options].some(option => option.value === value)) {
+    const option = new Option(value === "auto" ? "ukuran asli video (tersimpan)" : `${value} (tersimpan)`, value);
+    option.hidden = true;
+    option.dataset.legacy = "true";
+    clipRatio.add(option);
+  }
+  clipRatio.value = value;
+}
 const filmSourceRatio = $<HTMLSelectElement>("#film-source-ratio");
+function setFilmCrop(value: string) {
+  filmSourceRatio.querySelectorAll('option[data-legacy]').forEach(option => option.remove());
+  if (![...filmSourceRatio.options].some(option => option.value === value)) {
+    const option = new Option(value === "auto" ? "ukuran asli video (tersimpan)" : `${value} (tersimpan)`, value);
+    option.hidden = true;
+    option.dataset.legacy = "true";
+    filmSourceRatio.add(option);
+  }
+  filmSourceRatio.value = value;
+}
 const filmBackground = $<HTMLSelectElement>("#film-background");
 const filmDubSpeed = $<HTMLInputElement>("#film-dub-speed");
-const clipDubSpeed = $<HTMLInputElement>("#clip-dub-speed");
 const filmEpisodes = $<HTMLInputElement>("#film-episodes");
 const filmDuration = $<HTMLSelectElement>("#film-duration");
 const filmVoice = $<HTMLSelectElement>("#film-voice");
 const filmRatio = $<HTMLSelectElement>("#film-ratio");
 const filmStyle = $<HTMLSelectElement>("#film-style");
-const filmStoryMode = $<HTMLSelectElement>("#film-story-mode");
-const filmStoryHint = $<HTMLElement>("#film-story-hint");
 const filmPrompt = $<HTMLInputElement>("#film-prompt");
 const moodOptions = $<HTMLDivElement>("#opt-mood");
 function setMood(value: string) {
@@ -699,7 +869,7 @@ async function populateOptions() {
   const branding = { style: brandStyle.value, opacity: brandOpacity.value };
   const animation = sel.animation.value;
   options = o;
-  fill(sel.ratio, o.ratios.flatMap((r) => [[`${r}|crop`, `${r} · crop`], [`${r}|fit`, `${r} · no crop`]] as [string, string][]));
+  fill(sel.ratio, o.ratios.map((r) => [r, r]));
   fill(sel.count, o.counts.map((n) => [String(n), `${n} clip${n > 1 ? "s" : ""}`]));
   fill(sel.duration, o.durations.map((d) => [String(d), `≤ ${d}s`]));
   fill(sel.font, Object.entries(o.fonts));
@@ -780,7 +950,7 @@ function setThumbPosition(pos: string) {
 }
 
 function shapeFrame() {
-  const ratio = mode === "filming" ? filmRatio.value : (sel.ratio.value || "9:16|crop").split("|")[0];
+  const ratio = mode === "filming" ? filmRatio.value : (sel.ratio.value || "9:16");
   positionFrame.style.aspectRatio = ratio.replace(":", " / ");
   thumbFrame.style.aspectRatio = positionFrame.style.aspectRatio;
 }
@@ -812,15 +982,17 @@ function revealSettings() {
 function missingFields(): HTMLElement[] {
   const filming = mode === "filming";
   const selects = filming
-    ? [filmRatio, filmSourceRatio, filmBackground, filmDuration, filmVoice, filmStyle, filmStoryMode]
-    : [sel.ratio, sel.count, sel.duration, sel.voice];
+    ? [filmRatio, filmSourceRatio, filmBackground, filmDuration, filmVoice, filmStyle]
+    : [sel.ratio, clipRatio, clipBackground, sel.duration, sel.count, sel.voice];
   selects.push(sel.font, sel.animation, sel.case, captionMode, captionPosition, captionTextStyle,
-    sel.source, sel.titleStyle);
+    sel.source);
+  if (thumbTextMode.value !== "none") selects.push(sel.titleStyle);
   if (captionMode.value === "sentence") selects.push(captionLines);
   const missing: HTMLElement[] = selects.filter((field) => !field.value);
   if (filming && !filmEpisodes.validity.valid) missing.push(filmEpisodes);
-  const speed = filming ? filmDubSpeed : clipDubSpeed;
-  if (!speed.validity.valid) missing.push(speed);
+  if (filming && !filmDubSpeed.validity.valid) missing.push(filmDubSpeed);
+  if (thumbTextMode.value === "manual" && !thumbText.value.trim()) missing.push(thumbText);
+  if (musicUrl.value.trim() && !musicUrl.validity.valid) missing.push(musicUrl);
   if (!color) missing.push(swatches);
   if (sel.source.value === "upload" && !imageInput.files?.length) missing.push(imagePick);
   if (!apiKeyReady) missing.push(keyInput);
@@ -850,15 +1022,15 @@ function setStarted(value: boolean) {
 }
 
 function progress() {
-  filmStoryHint.textContent = filmStoryMode.value === "standalone"
-    ? "Setiap clip direncanakan sebagai cerita mandiri. Durasi tiap clip diupayakan mendekati batas yang dipilih."
-    : "Satu rangkuman cerita utuh dibuat terlebih dahulu, lalu dibagi sesuai jumlah video / part. Durasi tiap part diupayakan mendekati batas yang dipilih.";
+  updateMusicRange();
+  sel.titleStyle.parentElement!.hidden = thumbTextMode.value === "none";
+  thumbText.hidden = thumbTextMode.value !== "manual";
+  thumbText.required = !thumbText.hidden;
   captionLinesPick.hidden = captionMode.value !== "sentence";
   const noTitle = sel.titleStyle.querySelector<HTMLOptionElement>('option[value="none"]');
   if (noTitle) {
-    const hasText = thumbText.value.trim().length > 0;
-    noTitle.hidden = noTitle.disabled = hasText;
-    if (hasText && sel.titleStyle.value === "none") sel.titleStyle.value = "bold";
+    noTitle.hidden = noTitle.disabled = true;
+    if (thumbTextMode.value !== "none" && sel.titleStyle.value === "none") sel.titleStyle.value = "bold";
   }
   const missing = missingFields();
   startButton.setAttribute("aria-disabled", String(
@@ -892,8 +1064,9 @@ document.querySelectorAll<HTMLButtonElement>("[data-step-input]").forEach((butto
   });
 });
 thumbText.addEventListener("input", progress);
-[filmSourceRatio, filmBackground, filmEpisodes, filmDuration, filmVoice, filmRatio, filmStyle, filmStoryMode,
-  captionMode, captionPosition, captionTextStyle, captionLines, filmDubSpeed, clipDubSpeed].forEach((field) => field.addEventListener("input", progress));
+thumbTextMode.addEventListener("change", progress);
+[clipRatio, clipBackground, filmSourceRatio, filmBackground, filmEpisodes, filmDuration, filmVoice, filmRatio, filmStyle,
+  captionMode, captionPosition, captionTextStyle, captionLines, filmDubSpeed].forEach((field) => field.addEventListener("input", progress));
 filmRatio.addEventListener("change", shapeFrame);
 sel.ratio.addEventListener("change", shapeFrame);
 sel.source.addEventListener("change", () => {
@@ -984,23 +1157,25 @@ function settings() {
   if (mode === "filming") {
     return {
       mode: "filming",
-      film: { episodes: Number(filmEpisodes.value), max_duration: Number(filmDuration.value), style: filmStyle.value, story_mode: filmStoryMode.value, additional_prompt: filmPrompt.value.trim(), voice: filmVoice.value, source_ratio: filmSourceRatio.value, background: filmBackground.value },
+      music_start: musicStartWanted, music_length: musicWindowLength() || null,
+      film: { episodes: Number(filmEpisodes.value), max_duration: Number(filmDuration.value), style: filmStyle.value, additional_prompt: filmPrompt.value.trim(), voice: filmVoice.value, source_ratio: filmSourceRatio.value, background: filmBackground.value },
       mood: "auto",
       clip: { ratio: filmRatio.value, fit: "crop", count: Number(filmEpisodes.value), max_duration: Number(filmDuration.value), dubbing_speed: Number(filmDubSpeed.value) },
       caption: { font: sel.font.value, animation: sel.animation.value, color, case: sel.case.value, position: Number(captionPosition.value), display: captionMode.value, text_style: captionTextStyle.value, max_lines: Number(captionLines.value) },
-      thumb: { source: sel.source.value, title_style: sel.titleStyle.value, text: thumbText.value.trim(), sequence: thumbNumber.value, position: thumbPosition, voice: null },
+      thumb: { source: sel.source.value, title_style: thumbTextMode.value === "none" ? "none" : sel.titleStyle.value, text: thumbTextMode.value === "manual" ? thumbText.value.trim() : "", text_mode: thumbTextMode.value, sequence: thumbNumber.value, position: thumbPosition, voice: null },
       brand: { position: logoPosition, text: brandText.value.trim(), style: brandStyle.value || BRAND_DEFAULTS.style, opacity: Number(brandOpacity.value || BRAND_DEFAULTS.opacity) },
     };
   }
-  const [ratio, fit] = sel.ratio.value.split("|");
   return {
     mood,
-    clip: { ratio, fit, count: Number(sel.count.value), max_duration: Number(sel.duration.value), dubbing_speed: Number(clipDubSpeed.value) },
+    music_start: musicStartWanted, music_length: musicWindowLength() || null,
+    clip: { ratio: sel.ratio.value, fit: "crop", clip_ratio: clipRatio.value, background: clipBackground.value, count: Number(sel.count.value), max_duration: Number(sel.duration.value) },
     caption: { font: sel.font.value, animation: sel.animation.value, color, case: sel.case.value, position: Number(captionPosition.value), display: captionMode.value, text_style: captionTextStyle.value, max_lines: Number(captionLines.value) },
     thumb: {
       source: sel.source.value,
-      title_style: sel.titleStyle.value,
-      text: thumbText.value.trim(),
+      title_style: thumbTextMode.value === "none" ? "none" : sel.titleStyle.value,
+      text: thumbTextMode.value === "manual" ? thumbText.value.trim() : "",
+      text_mode: thumbTextMode.value,
       sequence: thumbNumber.value,
       position: thumbPosition,
       voice: sel.voice.value === "none" ? null : sel.voice.value,
@@ -1041,6 +1216,8 @@ startButton.addEventListener("click", async () => {
     if (mode === "filming" && subtitleInput.files?.[0]) body.append("subtitle", subtitleInput.files[0]);
     if (sel.source.value === "upload" && imageInput.files?.[0]) body.append("image", imageInput.files[0]);
     if (logoInput.files?.[0]) body.append("logo", logoInput.files[0]);
+    if (musicInput.files?.[0]) body.append("music", musicInput.files[0]);
+    else if (musicUrl.value.trim()) body.append("music_url", musicUrl.value.trim());
     const res = await fetch("/api/projects", { method: "POST", body });
     const data = await res.json();
     if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : `status ${res.status}`);
@@ -1074,10 +1251,11 @@ function resetAll(focus = true) {
   swatches.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.color === color)));
   imageInput.value = "";
   thumbText.value = "";
-  filmDubSpeed.value = clipDubSpeed.value = "1.0";
+  thumbTextMode.value = "auto";
+  filmDubSpeed.value = "1.0";
+  setClipCrop("none"); clipBackground.value = "blur";
   filmEpisodes.value = filmEpisodes.defaultValue;
-  filmStoryMode.value = "serial";
-  progress();
+  clearVideoPreset();
   thumbNumber.value = "off";
   setThumbPosition("bc");
   captionPosition.value = "6";
@@ -1087,6 +1265,9 @@ function resetAll(focus = true) {
   captionTextStyle.value = "plain";
   imagePick.hidden = true;
   imagePick.textContent = "choose image";
+  musicInput.value = "";
+  musicUrl.value = "";
+  musicInput.dispatchEvent(new Event("change"));
   logoInput.value = "";
   logoInput.dispatchEvent(new Event("change"));
   setPosition("bc");
@@ -1095,6 +1276,7 @@ function resetAll(focus = true) {
   Object.values(steps).forEach((s) => s.classList.remove("show"));
   stage.classList.remove("flowing");
   setHint(startHint, "");
+  progress();
   if (focus) {
     window.scrollTo({ top: 0, behavior: "smooth" });
     input.focus({ preventScroll: true });
@@ -1106,6 +1288,7 @@ document.querySelectorAll<HTMLButtonElement>(".mode-select button").forEach((cho
   const next = choice.dataset.mode === "filming" ? "filming" : "clipping";
   if (next === mode) return;
   mode = next;
+  clearVideoPreset();
   if (mode !== "filming") clearSubtitle();
   subtitleUpload.hidden = mode !== "filming" || !current;
   document.querySelectorAll<HTMLButtonElement>(".mode-select button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
@@ -1198,7 +1381,13 @@ function clipRow(p: Project, c: Clip): HTMLLIElement {
   if (c.video) name.addEventListener("click", () => openPreview(p, c));
 
   let action: HTMLElement;
-  if (c.status === "error" && p.status !== "cancelled") {
+  const running = !["done", "error", "cancelled"].includes(p.status);
+  const errorText = c.error?.includes("name 'film' is not defined") ? "Kesalahan pembacaan rasio video" : c.error;
+  const message = el("span", { className: "clip-error", textContent: errorText || "Klip gagal diproses" });
+  message.setAttribute("role", "status");
+  if (c.status === "error" && running) {
+    action = el("span", { className: "state", textContent: "tunggu selesai" });
+  } else if (c.status === "error" && p.status !== "cancelled") {
     action = el("button", { type: "button", className: "text-button warn", textContent: "retry", title: c.error ?? "" });
     action.addEventListener("click", async () => {
       (action as HTMLButtonElement).disabled = true;
@@ -1209,7 +1398,7 @@ function clipRow(p: Project, c: Clip): HTMLLIElement {
       } catch (err) {
         action.textContent = "retry";
         (action as HTMLButtonElement).disabled = false;
-        action.title = (err as Error).message;
+        message.textContent = (err as Error).message;
       }
     });
   } else if (c.video) {
@@ -1217,7 +1406,7 @@ function clipRow(p: Project, c: Clip): HTMLLIElement {
   } else {
     action = el("span", { className: "state", textContent: p.status === "cancelled" ? "dihentikan" : c.status });
   }
-  return el("li", {}, el("span", { className: "n", textContent: String(c.n).padStart(2, "0") }), name, action);
+  return el("li", { className: c.status === "error" ? "has-error" : "" }, el("span", { className: "n", textContent: String(c.n).padStart(2, "0") }), name, action, c.status === "error" ? message : null);
 }
 
 function projectCard(p: Project): HTMLLIElement {
@@ -1226,14 +1415,14 @@ function projectCard(p: Project): HTMLLIElement {
   const status =
     p.status === "cancelled" ? el("p", { className: "progress", textContent: "dihentikan" }) : p.status === "error"
       ? el("p", { className: "progress error", textContent: `failed · ${p.error ?? "unknown error"}` })
-      : el("p", { className: `progress${running ? "" : " done"}`, textContent: running ? `${asciiBar(p.progress)} ${p.stage}` : `done · ${p.clips.filter((c) => c.status === "done").length} clips` });
+      : el("p", { className: `progress${running ? "" : " done"}`, textContent: running ? `${asciiBar(p.progress)} ${p.stage}` : `${p.clips.some((c) => c.status === "error") ? "selesai sebagian" : "done"} · ${p.clips.filter((c) => c.status === "done").length} clips` });
   const dot = el("span", { className: "dot" });
   dot.style.background = options?.colors[s.caption.color] ?? s.caption.color;
   const meta = el(
     "dl",
     {},
     el("dt", { textContent: "clip" }),
-    el("dd", { textContent: `${s.clip.ratio} ${s.clip.fit === "crop" ? "crop" : "no crop"} · ${s.clip.count} clip${s.clip.count > 1 ? "s" : ""} · ≤${s.clip.max_duration}s` }),
+    el("dd", { textContent: `${clipLayout(s)} · ${s.clip.count} clip${s.clip.count > 1 ? "s" : ""} · ≤${s.clip.max_duration}s` }),
     el("dt", { textContent: "caption" }),
     el("dd", {}, `${label("fonts", s.caption.font)} · ${label("animations", s.caption.animation)} · `, dot, label("cases", s.caption.case)),
     el("dt", { textContent: "thumb" }),
@@ -1256,19 +1445,20 @@ function projectCard(p: Project): HTMLLIElement {
   cover.addEventListener("click", () => openEditor(p.id));
   heading.addEventListener("click", () => openEditor(p.id));
 
-  const control = el("button", { type: "button", className: "text-button project-control", textContent: p.status === "cancelled" ? "hapus" : p.status === "stopping" ? "menghentikan…" : "stop" });
-  control.hidden = !running && p.status !== "cancelled";
+  const removable = p.status === "cancelled" || p.status === "error";
+  const control = el("button", { type: "button", className: "text-button project-control", textContent: removable ? "hapus" : p.status === "stopping" ? "menghentikan…" : "stop" });
+  control.hidden = !running && !removable;
   control.disabled = p.status === "stopping";
   control.addEventListener("click", async () => {
-    if (p.status === "cancelled" && !window.confirm("Hapus proyek yang sudah dihentikan beserta hasilnya?")) return;
+    if (removable && !window.confirm("Hapus proyek ini beserta hasilnya?")) return;
     control.disabled = true;
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(p.id)}${p.status === "cancelled" ? "" : "/stop"}`, { method: p.status === "cancelled" ? "DELETE" : "POST" });
+      const response = await fetch(`/api/projects/${encodeURIComponent(p.id)}${removable ? "" : "/stop"}`, { method: removable ? "DELETE" : "POST" });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
         throw new Error(typeof body?.detail === "string" ? body.detail : `status ${response.status}`);
       }
-      if (p.status !== "cancelled") {
+      if (!removable) {
         const stopped: Project = await response.json();
         const node = projectCard(stopped);
         projectCards.set(stopped.id, { signature: JSON.stringify(stopped), node });
@@ -1281,6 +1471,7 @@ function projectCard(p: Project): HTMLLIElement {
     }
   });
 
+  // Jobs stopped before producing anything can be resumed with their saved inputs.
   const restartable = ["cancelled", "error"].includes(p.status) && p.progress === 0 && p.clips.length === 0;
   const restart = el("button", { type: "button", className: "text-button", textContent: "lanjutkan proyek" });
   restart.addEventListener("click", async () => {
@@ -1305,7 +1496,6 @@ function projectCard(p: Project): HTMLLIElement {
     cover,
     el("div", {}, el("h3", {}, heading), status, restartable && restart, meta),
     p.clips.length > 0 && el("ol", { className: "clips" }, ...p.clips.map((c) => clipRow(p, c))),
-    sequenceLink(p),
   );
 }
 
@@ -1347,3 +1537,47 @@ refreshProjects();
 
 // Avoid opening the phone keyboard before the user chooses link or upload.
 if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) input.focus();
+
+// Ready-made combinations inspired by popular short-form video treatments.
+const videoPresets: Record<string, {animation: string; color: string; display: string; textStyle: string; letterCase: string; title: string; font: string; description: string}> = {
+  viral: {animation: "highlight", color: "yellow", display: "sentence", textStyle: "outline", letterCase: "upper", title: "pop", font: "montserrat", description: "Teks tebal dengan sorotan kata aktif."},
+  podcast: {animation: "fade", color: "white", display: "sentence", textStyle: "shadow", letterCase: "sentence", title: "shadow", font: "poppins", description: "Caption tenang untuk percakapan dan wawancara."},
+  karaoke: {animation: "karaoke", color: "cyan", display: "sentence", textStyle: "outline", letterCase: "sentence", title: "underline", font: "montserrat", description: "Warna mengikuti kata yang diucapkan."},
+  box: {animation: "box", color: "yellow", display: "sentence", textStyle: "outline", letterCase: "upper", title: "box", font: "montserrat", description: "Kotak menonjolkan kata aktif."},
+  cinematic: {animation: "fade", color: "white", display: "sentence", textStyle: "shadow", letterCase: "sentence", title: "shadow", font: "montserrat", description: "Tampilan sederhana agar visual cerita tetap menonjol."},
+};
+const videoPreset = $<HTMLSelectElement>("#video-preset");
+videoPreset.addEventListener("change", () => {
+  const preset = videoPresets[videoPreset.value];
+  if (!preset || !options) return;
+  // Preserve user-provided source, title, logo, branding and narrator selections.
+  if (mode === "filming") {
+    filmRatio.value = "9:16"; filmEpisodes.value = "4"; filmDuration.value = "60";
+    setFilmCrop("none"); filmBackground.value = "blur"; filmDubSpeed.value = "1.0";
+    filmStyle.value = preset === videoPresets.cinematic ? "dramatis dan sinematik" : "informatif dan jelas";
+  } else {
+    sel.ratio.value = "9:16"; setClipCrop("none"); clipBackground.value = "blur"; sel.count.value = "4"; sel.duration.value = "60";
+  }
+  sel.font.value = preset.font; sel.animation.value = preset.animation; sel.case.value = preset.letterCase;
+  captionMode.value = preset.display; captionLines.value = "2"; captionPosition.value = "5";
+  captionTextStyle.value = preset.textStyle; color = preset.color;
+  swatches.querySelectorAll<HTMLButtonElement>("button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.color === color)));
+  sel.titleStyle.value = preset.title;
+  if (!sel.source.value) sel.source.value = "auto";
+  if (!sel.voice.value) sel.voice.value = "none";
+  $<HTMLElement>("#preset-hint").textContent = preset.description;
+  shapeFrame(); progress();
+});
+
+// A preset is a starting point; clear its selection when its settings are edited.
+function clearVideoPreset() {
+  videoPreset.value = "";
+  $<HTMLElement>("#preset-hint").textContent = "";
+}
+[filmRatio, filmEpisodes, filmDuration, filmSourceRatio, filmBackground, filmDubSpeed, filmStyle,
+ sel.ratio, clipRatio, clipBackground, sel.count, sel.duration, sel.font, sel.animation, sel.case, captionMode,
+ captionLines, captionPosition, captionTextStyle, sel.titleStyle].forEach(field => {
+  field.addEventListener("input", clearVideoPreset);
+  field.addEventListener("change", clearVideoPreset);
+});
+swatches.addEventListener("click", clearVideoPreset);

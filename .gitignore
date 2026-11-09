@@ -4,9 +4,14 @@ server/.venv/
 server/data/
 server/models/
 __pycache__/
-*.pyc
+*.py[cod]
 .env
 .env.*
 *.pem
 *.key
-*.p12
+*.log
+/hyperframes-renderer/node_modules/
+/hyperframes-renderer/.hyperframes/
+/hyperframes-renderer/.thumbnails/
+/hyperframes-renderer/assets/
+/hyperframes-renderer/renders/

@@ -54,6 +54,8 @@ class Project:
     upload: str | None = None
     logo: str | None = None
     subtitle: str | None = None
+    music: str | None = None
+    music_url: str | None = None
     transcript_origin: str | None = None
     transcript_note: str | None = None
     transcript_timing: str | None = None
@@ -152,10 +154,18 @@ def stop(p: Project) -> Project:
         return current
 
 
+def _active_running(project_id: str) -> bool:
+    if _active is None or _active[0] != project_id:
+        return False
+    poll = getattr(_active[1], "poll", None)
+    return True if poll is None else poll() is None
+
+
 def delete_stopped(p: Project) -> None:
     with _lock:
         current = _projects.get(p.id)
-        if current is None or current.status != "cancelled":
+        if (current is None or current.status not in ("cancelled", "error")
+                or _active_running(current.id)):
             raise ValueError("Tunggu hingga proses berhenti")
         if p.dir.resolve().parent != DATA_DIR.resolve() or p.dir.is_symlink():
             raise ValueError("Folder proyek tidak valid")
@@ -215,6 +225,8 @@ def sources() -> list[dict]:
     """
     by_key: dict[str, list[Project]] = {}
     for p in all_projects():
+        if p.transcript_origin in ("hyperframes-demo", "ffmpeg-demo"):
+            continue
         if (p.dir / "words.json").exists() and (not p.upload_id or p.local_video):
             by_key.setdefault(p.source_key, []).append(p)
     out = []
@@ -293,13 +305,13 @@ def all_projects() -> list[Project]:
         return sorted(_projects.values(), key=lambda p: p.created, reverse=True)
 
 
+# ---------- pipeline ----------
+
 def update_busy() -> bool:
     """Prevent an installer from stopping a running or queued project."""
     with _lock:
         return _active is not None or any(p.status not in TERMINAL for p in _projects.values())
 
-
-# ---------- pipeline ----------
 
 def _stage(p: Project, status: str, stage: str | None = None) -> None:
     p.status = status
@@ -336,6 +348,8 @@ def _clip_options(p: Project):
         "width": width,
         "height": height,
         "fit": clip_cfg["fit"],
+        "clip_ratio": clip_cfg.get("clip_ratio"),
+        "background": clip_cfg.get("background") or "blur",
         "style": CaptionStyle(**p.settings["caption"]),
         "thumb_cfg": p.settings["thumb"],
         "dubbing_speed": clip_cfg.get("dubbing_speed", 1.0),
@@ -355,6 +369,11 @@ def _save_words(p: Project, words: list[Word]) -> None:
 
 
 def _run(p: Project) -> None:
+    if p.music_url and not p.music:
+        from . import music
+        _stage(p, "downloading", "mengambil musik")
+        p.music = music.download(p.music_url, p.dir).name
+        p.save()
     clip_cfg = p.settings["clip"]
     opts = _clip_options(p)
 
@@ -529,6 +548,7 @@ def _attempt_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: f
 
 
 def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: float, share: float) -> None:
+    from . import film
     n = clip["n"]
     d = p.dir
     width, height, fit = opts["width"], opts["height"], opts["fit"]
@@ -545,8 +565,10 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
         else:
             src = media.download_section(p.url, clip["start"], clip["end"], src, fetched)
 
-    inset = media.letterbox(src)
-    if inset:
+    clip_ratio = opts.get("clip_ratio")
+    inset = media.crop_insets(src, clip_ratio)
+    has_inset = any(inset) if isinstance(inset, tuple) else bool(inset)
+    if has_inset:
         clean = d / f"src_{n}_active.mp4"
         if not clean.exists():
             media.remove_letterbox(src, clean, inset, _span(p, base + share * .25, base + share * .32))
@@ -562,11 +584,15 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
     (d / f"clip_{n}.srt").write_text(captions.build_srt(local, opts["style"], width, height), encoding="utf-8")
     clip["srt"] = f"clip_{n}.srt"
 
+    source_ratio = film._source_ratio(src) if clip_ratio is not None else None
+    background = opts.get("background", "blur")
     plan = None
-    if fit == "crop":
+    if fit == "crop" and clip_ratio not in ("auto", "none", "blackbar"):
         clip["status"] = "framing"
         try:
-            plan = framing.plan_crop(src, width, height, local)
+            frame_width, frame_height = (media.clip_frame_size(width, clip_ratio, source_ratio)
+                                         if clip_ratio is not None and source_ratio is not None else (width, height))
+            plan = framing.plan_crop(src, frame_width, frame_height, local)
         except Exception:
             # Framing is a nicety; a centre crop is still a usable short.
             traceback.print_exc()
@@ -578,16 +604,19 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
     # Without a dubbed intro, the title shows over the opening seconds instead.
     title = None if voice else thumbs.title_overlay(d / f"title_{n}.png", width, height, clip["title"], thumb_cfg.get("title_style", "bold"))
     media.render_clip(src, ass, body, width, height, fit, _span(p, base + share * 0.4, base + share * 0.85),
-                      opts["brand"], opts["brand_position"], plan, title)
+                      opts["brand"], opts["brand_position"], plan, title,
+                      clip_ratio=clip_ratio, background=background, source_ratio=source_ratio)
 
     clip["status"] = "thumbnail"
     frame = d / f"frame_{n}.jpg"
     if thumb_cfg.get("source") == "upload" and p.upload:
         thumbs.prepare(d / p.upload, frame, width, height)
     else:
-        media.grab_frame(src, frame, width, height, fit, plan)
+        media.grab_frame(src, frame, width, height, fit, plan, clip_ratio=clip_ratio,
+                         background=background, source_ratio=source_ratio)
     thumb = d / f"thumb_{n}.jpg"
-    thumbs.add_title(frame, thumb, clip["title"], thumb_cfg.get("title_style", "bold"), custom_text=thumb_cfg.get("text", ""),
+    title_text = thumbs.thumbnail_text(thumb_cfg, clip, " ".join(w.text for w in local))
+    thumbs.add_title(frame, thumb, clip["title"], "none" if thumb_cfg.get("text_mode") == "none" else thumb_cfg.get("title_style", "bold"), custom_text=title_text,
                      number=n, sequence=thumb_cfg.get("sequence") or ("number" if thumb_cfg.get("numbered") else "off"),
                      position=thumb_cfg.get("position"))
     frame.unlink(missing_ok=True)
@@ -596,19 +625,22 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
     clip["thumb"] = thumb.name
 
     out = d / f"clip_{n}.mp4"
-    dubbed = False
     if voice:
         clip["status"] = "dubbing"
         try:
             speech = tts.speak(clip["title"], voice, d / f"dub_{n}.mp3", speed=opts["dubbing_speed"])
             media.add_intro(body, thumb, speech, out, width, height)
-            dubbed = True
+            body.unlink(missing_ok=True)
         except Exception as e:
             # A dubbing hiccup shouldn't cost the whole clip: keep it without the intro.
             traceback.print_exc()
             clip["note"] = f"no dubbed intro ({e or e.__class__.__name__})"
-    if body.exists() and not dubbed:
+    if body.exists():
         body.replace(out)
+    if getattr(p, "music", None):
+        mixed = d / f"clip_{n}_music.mp4"
+        media.mix_music(out, d / p.music, mixed, start=p.settings.get("music_start", 0), length=p.settings.get("music_length"))
+        mixed.replace(out)
     clip["video"] = out.name
     p.progress = base + share
 
@@ -711,7 +743,10 @@ def _retry(p: Project, n: int) -> None:
             ensure_posts(p)
         except Exception:
             traceback.print_exc()
-    p.status, p.stage, p.progress = "done", "done", 1.0
+    if any(c.get("status") == "done" for c in p.clips):
+        p.status, p.stage, p.progress, p.error = "done", "done", 1.0, None
+    else:
+        p.status, p.stage, p.error = "error", "failed", clip.get("error") or "Klip gagal diproses"
     p.save()
 
 
@@ -721,15 +756,14 @@ def _fail(p: Project, error: str) -> None:
 
 
 def _start_project(pid: str, args: list) -> subprocess.Popen:
-    # Frozen desktop executables dispatch the worker through their own entry point;
-    # the normal Python interpreter keeps the existing development command.
+    # Frozen desktop executables dispatch the worker through their own entry point.
     command = ([sys.executable, "--project-worker"] if getattr(sys, "frozen", False)
                else [sys.executable, "-m", "clipy.project_worker"])
     return subprocess.Popen(
         [*command, str(DATA_DIR), pid, *map(str, args)],
         cwd=Path(__file__).resolve().parent.parent,
-        # Do not inherit the desktop parent's launcher-monitoring stdin pipe:
-        # Windows can otherwise hang while Python initializes the worker.
+        # The desktop parent monitors stdin for launcher exit. Inheriting its
+        # blocked pipe can hang Python startup on Windows before the job runs.
         stdin=subprocess.DEVNULL,
         start_new_session=os.name != "nt",
     )
@@ -748,6 +782,7 @@ def _worker() -> None:
             try:
                 proc = _start_project(pid, args)
             except OSError as e:
+                traceback.print_exc()
                 _fail(p, str(e))
                 continue
             _active = (pid, proc)

@@ -27,6 +27,7 @@ import os
 import re
 import shutil
 import tempfile
+import mimetypes
 from subprocess import TimeoutExpired
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -35,6 +36,7 @@ from urllib.parse import parse_qs, urlparse
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from clipy import captions, keys, media, projects, social, thumbs, tts, uploads
@@ -57,6 +59,9 @@ DURATIONS = [15, 30, 45, 60, 90, 120]
 class ClipSettings(BaseModel):
     ratio: str = Field(pattern="^(" + "|".join(re.escape(r) for r in media.RATIOS) + ")$")
     fit: str = Field(pattern="^(crop|fit)$")
+    # None keeps the rendering behavior of projects created before these options existed.
+    clip_ratio: str | None = Field(default=None, pattern=r"^(auto|none|blackbar|1:1|3:4|4:5|5:4|9:16|16:9)$")
+    background: str | None = Field(default=None, pattern=r"^(blur|black|white)$")
     count: int = Field(ge=1, le=10)
     max_duration: int = Field(ge=10, le=180)
     dubbing_speed: float = Field(default=1.0, ge=1, le=2)
@@ -77,6 +82,7 @@ class ThumbSettings(BaseModel):
     source: str = Field(pattern="^(auto|upload)$")
     title_style: str
     text: str = Field(default="", max_length=120)
+    text_mode: str | None = Field(default=None, pattern="^(auto|manual|none)$")
     numbered: bool = False
     sequence: str | None = Field(default=None, pattern="^(off|number|letter|episode|part|clip)$")
     position: str | None = Field(default=None, pattern="^[tmb][lcr]$")
@@ -101,7 +107,7 @@ class BrandSettings(BaseModel):
 class FilmSettings(BaseModel):
     episodes: int = Field(default=4, ge=1, le=10)
     max_duration: int = Field(default=60, ge=10, le=180)
-    story_mode: str = Field(default="serial", pattern="^(serial|standalone)$")
+    story_mode: str = Field(default="standalone", pattern="^(serial|standalone)$")
     style: str = Field(default="informatif", max_length=500)
     additional_prompt: str = Field(default="", max_length=2000)
     voice: str = "id-ID-GadisNeural"
@@ -113,6 +119,8 @@ class FilmSettings(BaseModel):
 class Settings(BaseModel):
     mode: str = Field(default="clipping", pattern="^(clipping|filming)$")
     film: FilmSettings | None = None
+    music_start: float = Field(default=0, ge=0, le=14400)
+    music_length: float | None = Field(default=None, gt=0, le=180)
     mood: str = Field(default="auto", pattern="^(auto|senang|sedih|lucu|serius|seram|informatif|inspiratif|konyol)$")
     clip: ClipSettings
     caption: CaptionSettings
@@ -200,9 +208,9 @@ def pick_local_video(request: Request):
     if request.client is None or request.client.host not in ("127.0.0.1", "::1"):
         raise HTTPException(403, "Hanya tersedia di komputer server")
     desktop_origin = os.environ.get("CLIPY_DESKTOP_ORIGIN", "")
-    if origin not in ("http://127.0.0.1:4747", "http://localhost:4747") and not (desktop_origin and origin == desktop_origin):
+    if origin not in ("http://127.0.0.1:4747", "http://localhost:4747", "http://127.0.0.1:4757", "http://localhost:4757") and not (desktop_origin and origin == desktop_origin):
         raise HTTPException(403, "Pemilih file hanya tersedia dari halaman lokal")
-    allowed_hosts = ("127.0.0.1:4747", "localhost:4747", "127.0.0.1:4748", "localhost:4748", desktop_origin.removeprefix("http://"))
+    allowed_hosts = ("127.0.0.1:4747", "localhost:4747", "127.0.0.1:4748", "localhost:4748", "127.0.0.1:4757", "localhost:4757", "127.0.0.1:4758", "localhost:4758", desktop_origin.removeprefix("http://"))
     if request.headers.get("host", "") not in allowed_hosts:
         raise HTTPException(403, "Host tidak diizinkan")
     import tkinter as tk
@@ -264,6 +272,26 @@ def list_sources():
 
 # ---------- projects ----------
 
+@app.post("/api/music/preview")
+async def preview_music(url: str = Form(...)):
+    """Download a bounded public music source and return audio for local preview."""
+    from clipy import music as music_source
+    url = url.strip()
+    try:
+        music_source.validate_url(url)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    directory = Path(tempfile.mkdtemp(prefix="clipy-music-preview-"))
+    try:
+        path = await run_in_threadpool(music_source.download, url, directory)
+    except Exception as e:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise HTTPException(400, f"Tidak dapat mengambil musik: {e}") from e
+    media_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=media_type,
+                        background=BackgroundTask(shutil.rmtree, directory, ignore_errors=True))
+
+
 @app.post("/api/projects")
 async def create_project(
     settings: str = Form(...),
@@ -274,6 +302,8 @@ async def create_project(
     image: UploadFile | None = File(None),
     logo: UploadFile | None = File(None),
     subtitle: UploadFile | None = File(None),
+    music: UploadFile | None = File(None),
+    music_url: str = Form(""),
 ):
     vid = ""
     base = None
@@ -311,6 +341,18 @@ async def create_project(
         if f and (f.filename or "").rsplit(".", 1)[-1].lower() not in IMAGE_TYPES:
             raise HTTPException(400, "images must be JPG, PNG or WebP")
 
+    music_url = music_url.strip()
+    if music and music_url:
+        raise HTTPException(400, "Pilih tautan atau file musik")
+    if music_url:
+        from clipy.music import validate_url
+        try:
+            validate_url(music_url)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+    if music and (music.filename or "").rsplit(".", 1)[-1].lower() not in ("mp3", "wav", "m4a", "ogg", "flac", "webm"):
+        raise HTTPException(400, "Musik harus berupa MP3, WAV, M4A, OGG, atau FLAC")
+
     subtitle_bytes = None
     if subtitle:
         from clipy import subtitles
@@ -334,6 +376,28 @@ async def create_project(
         p.upload = await save_image(p, image, "upload")
     if logo:
         p.logo = await save_image(p, logo, "logo")
+    if music:
+        ext = (music.filename or "").rsplit(".", 1)[-1].lower()
+        path = p.dir / f"background_music.{ext}"
+        size = 0
+        with path.open("wb") as target:
+            while chunk := await music.read(1024 * 1024):
+                size += len(chunk)
+                if size > 100 * 1024 * 1024:
+                    break
+                target.write(chunk)
+        if size > 100 * 1024 * 1024:
+            path.unlink(missing_ok=True)
+            raise HTTPException(400, "Ukuran musik maksimal 100 MB")
+        try:
+            if not size or not media.has_audio(path):
+                raise ValueError("Berkas tidak memiliki audio")
+        except Exception as exc:
+            path.unlink(missing_ok=True)
+            raise HTTPException(400, f"Berkas musik tidak dapat dibaca: {exc}") from exc
+        p.music = path.name
+    if music_url:
+        p.music_url = music_url
     if subtitle_bytes is not None:
         (p.dir / "source.srt").write_bytes(subtitle_bytes)
         p.subtitle = "source.srt"
@@ -476,10 +540,10 @@ def clip_sequence(project_id: str):
 def saved_project_asset(project_id: str, kind: str):
     """Original logo/thumbnail upload, for restoring an earlier project's form."""
     p = projects.get(project_id)
-    name = ({"logo": p.logo, "image": p.upload}.get(kind)) if p else None
+    name = ({"logo": p.logo, "image": p.upload, "music": p.music}.get(kind)) if p else None
     if not p or not name or Path(name).name != name or not (p.dir / name).is_file():
         raise HTTPException(404, "saved asset not found")
-    content_type = {".png": "image/png", ".webp": "image/webp", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(Path(name).suffix.lower())
+    content_type = {".png": "image/png", ".webp": "image/webp", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".ogg": "audio/ogg", ".flac": "audio/flac", ".webm": "audio/webm"}.get(Path(name).suffix.lower())
     if not content_type:
         raise HTTPException(404, "saved asset not found")
     return FileResponse(p.dir / name, media_type=content_type)

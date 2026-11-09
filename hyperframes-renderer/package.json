@@ -1,0 +1,20 @@
+{
+  "name": "hyperframes-renderer",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "hyperframes preview",
+    "check": "hyperframes check",
+    "render": "hyperframes render"
+  },
+  "dependencies": {
+    "gsap": "3.15.0",
+    "hyperframes": "0.9.9"
+  },
+  "overrides": {
+    "hyperframes": {
+      "undici": "7.30.1"
+    }
+  }
+}

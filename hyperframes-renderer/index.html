@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=360, height=640">
+<script src="assets/gsap.min.js"></script>
+<style>
+@font-face {font-family: Clipy; src:url(assets/font.ttf)}
+* {box-sizing:border-box}
+html,body {margin:0;width:360px;height:640px;overflow:hidden;background:transparent}
+#root {width:100%;height:100%;font-family:Clipy,sans-serif;color:#fff}
+.cue {visibility:hidden;position:absolute;inset:0}
+.word {position:absolute;display:flex;align-items:center;justify-content:center;overflow:visible}
+.glyph {white-space:pre;position:relative;z-index:1;paint-order:stroke fill;transform-origin:center}
+.accent {position:absolute;opacity:0;pointer-events:none}
+
+</style></head><body>
+<div data-hf-id="hf-iuk7" id="root" data-composition-id="main" data-start="0" data-duration="3"
+data-width="360" data-height="640" data-fps="30"><div data-hf-id="hf-5737" class="cue" id="cue-0"><div data-hf-id="hf-u7kf" class="word" id="word-0-0-0" style="left:29.500px;top:291.000px;width:65.000px;height:29px;font-size:22px;line-height:1"><span data-hf-id="hf-ntdg" class="accent" style="inset:12% -1.76px;background:#33E1FF;border-radius:1.76px;"></span><span data-hf-id="hf-y77d" class="glyph" style="-webkit-text-stroke:2px #000;">PAUL</span></div><div data-hf-id="hf-0dly" class="word" id="word-0-0-1" style="left:101.500px;top:291.000px;width:110.000px;height:29px;font-size:22px;line-height:1"><span data-hf-id="hf-t8r0" class="accent" style="inset:12% -1.76px;background:#33E1FF;border-radius:1.76px;"></span><span data-hf-id="hf-h9ag" class="glyph" style="-webkit-text-stroke:2px #000;">KEMBALI</span></div><div data-hf-id="hf-sz3n" class="word" id="word-0-0-2" style="left:218.500px;top:291.000px;width:32.000px;height:29px;font-size:22px;line-height:1"><span data-hf-id="hf-s1tx" class="accent" style="inset:12% -1.76px;background:#33E1FF;border-radius:1.76px;"></span><span data-hf-id="hf-j4m7" class="glyph" style="-webkit-text-stroke:2px #000;">KE</span></div><div data-hf-id="hf-qugs" class="word" id="word-0-0-3" style="left:257.500px;top:291.000px;width:73.000px;height:29px;font-size:22px;line-height:1"><span data-hf-id="hf-sg4y" class="accent" style="inset:12% -1.76px;background:#33E1FF;border-radius:1.76px;"></span><span data-hf-id="hf-ev7v" class="glyph" style="-webkit-text-stroke:2px #000;">GARIS</span></div><div data-hf-id="hf-vm7z" class="word" id="word-0-1-0" style="left:137.500px;top:320.000px;width:85.000px;height:29px;font-size:22px;line-height:1"><span data-hf-id="hf-ufo3" class="accent" style="inset:12% -1.76px;background:#33E1FF;border-radius:1.76px;"></span><span data-hf-id="hf-0ssf" class="glyph" style="-webkit-text-stroke:2px #000;">DEPAN</span></div></div></div>
+<script type="application/json" id="overlay-config">{"cues": [{"id": "cue-0", "start": 0, "end": 2.5, "words": [{"id": "word-0-0-0", "start": 0.0, "end": 0.45}, {"id": "word-0-0-1", "start": 0.45, "end": 0.9}, {"id": "word-0-0-2", "start": 0.9, "end": 1.35}, {"id": "word-0-0-3", "start": 1.35, "end": 1.8}, {"id": "word-0-1-0", "start": 1.8, "end": 2.5}]}], "color": "#33E1FF", "animation": "box", "outline": 2, "duration": 3}</script>
+<script>/* Fixed glyph anchors and a seekable timeline, shared by preview and rendering. */
+const config = JSON.parse(document.getElementById("overlay-config").textContent);
+const timeline = gsap.timeline({paused: true});
+timeline.to({}, {duration: config.duration});
+
+for (const cue of config.cues || []) {
+  const group = document.getElementById(cue.id);
+  timeline.set(group, {visibility: "visible"}, cue.start);
+  timeline.set(group, {visibility: "hidden"}, cue.end);
+  for (const word of cue.words) {
+    const glyph = document.querySelector("#" + word.id + " .glyph");
+    const accent = document.querySelector("#" + word.id + " .accent");
+    const length = Math.max(0.001, word.end - word.start);
+    const paint = {color: config.color};
+    switch (config.animation) {
+      case "box":
+        timeline.set(accent, {opacity: 1}, word.start);
+        timeline.set(glyph, {color: "#000000", webkitTextStrokeWidth: "0px"}, word.start);
+        timeline.set(accent, {opacity: 0}, word.end);
+        break;
+      case "underline":
+        timeline.fromTo(accent, {scaleX: 0, opacity: 1}, {scaleX: 1, duration: Math.min(.12, length), immediateRender: false}, word.start);
+        timeline.set(accent, {opacity: 0}, word.end);
+        timeline.set(glyph, paint, word.start);
+        break;
+      case "glow":
+        timeline.set(accent, {opacity: 1}, word.start);
+        timeline.set(accent, {opacity: 0}, word.end);
+        timeline.set(glyph, paint, word.start);
+        break;
+      case "pop":
+        timeline.fromTo(glyph, {scale: .90, color: config.color},
+          {scale: 1, duration: Math.min(.14, length), ease: "back.out(1.4)", immediateRender: false}, word.start);
+        break;
+      case "karaoke":
+        timeline.fromTo(accent, {clipPath: "inset(0 100% 0 0)", opacity: 1},
+          {clipPath: "inset(0 0% 0 0)", duration: length, ease: "none", immediateRender: false}, word.start);
+        timeline.set(accent, {opacity: 0}, word.end);
+        break;
+      case "reveal":
+        timeline.fromTo(glyph, {opacity: 0}, {opacity: 1, color: config.color,
+          duration: Math.min(.09, length), immediateRender: false}, word.start);
+        break;
+      case "fade":
+        timeline.fromTo(glyph, {opacity: 0}, {opacity: 1, color: config.color,
+          duration: Math.min(.14, cue.end - cue.start), immediateRender: false}, cue.start);
+        timeline.to(glyph, {opacity: 0, duration: Math.min(.08, (cue.end - cue.start) / 2)}, cue.end - .08);
+        break;
+      default:
+        timeline.set(glyph, paint, word.start);
+    }
+    if (!["fade", "reveal", "karaoke"].includes(config.animation)) {
+      timeline.set(glyph, {color: "#FFFFFF", webkitTextStrokeWidth: config.outline + "px"}, word.end);
+    }
+  }
+}
+window.__timelines = window.__timelines || {};
+window.__timelines.main = timeline;
+timeline.seek(0);
+</script></body></html>

@@ -97,17 +97,19 @@
         <div class="step" id="step-film">
           <div class="step-inner">
             <p class="kicker"><span>filming</span></p>
-            <div class="row cols-3">
+            <div class="row cols-4">
               <label class="pick"><select id="film-ratio" required><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>output ratio</span></label>
+              <label class="pick"><select id="film-source-ratio" required><option value="none">no crop</option><option value="blackbar">crop black bar</option><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>crop clip</span></label>
+              <label class="pick" id="film-background-pick"><select id="film-background" required><option value="blur">blur</option><option value="black">hitam</option><option value="white">putih</option></select><span>background</span></label>
+              <label class="pick"><select id="film-duration" required><option value="60">≤ 60 detik</option><option value="90">≤ 90 detik</option><option value="120">≤ 120 detik</option><option value="180">≤ 180 detik</option></select><span>duration</span></label>
               <div class="pick episode-pick">
                 <input class="text-pick" id="film-episodes" aria-labelledby="film-episodes-label" required type="number" min="1" max="10" value="4" />
                 <div class="episode-stepper">
-                  <button type="button" id="film-episodes-up" aria-label="Tambah jumlah clip">▴</button>
-                  <button type="button" id="film-episodes-down" aria-label="Kurangi jumlah clip">▾</button>
+                  <button type="button" id="film-episodes-up" aria-label="Tambah jumlah episode">▴</button>
+                  <button type="button" id="film-episodes-down" aria-label="Kurangi jumlah episode">▾</button>
                 </div>
-                <span id="film-episodes-label">jumlah video / part · 1–10</span>
+                <span id="film-episodes-label">jumlah episode</span>
               </div>
-              <label class="pick"><select id="film-duration" required><option value="60">≤ 60 detik</option><option value="90">≤ 90 detik</option><option value="120">≤ 120 detik</option><option value="180">≤ 180 detik</option></select><span>durasi per episode</span></label>
               <label class="pick"><select id="film-voice" required></select><span>suara narator</span></label>
               <div class="pick episode-pick">
                 <input class="text-pick" id="film-dub-speed" aria-labelledby="film-dub-speed-label" required type="number" min="1" max="2" step="0.1" value="1.0" />
@@ -115,15 +117,11 @@
                   <button type="button" data-step-input="film-dub-speed" data-step="1" aria-label="Percepat dubbing">▴</button>
                   <button type="button" data-step-input="film-dub-speed" data-step="-1" aria-label="Perlambat dubbing">▾</button>
                 </div>
-                <span id="film-dub-speed-label">kecepatan dubbing · 1,0×–2,0×</span>
+                <span id="film-dub-speed-label">kecepatan dubbing</span>
               </div>
               <label class="pick"><select id="film-style" required><option value="dramatis dan sinematik">dramatis &amp; sinematik</option><option value="santai dan menghibur">santai &amp; menghibur</option><option value="misterius dan menegangkan">misterius &amp; menegangkan</option><option value="informatif dan jelas">informatif &amp; jelas</option><option value="lucu dan energik">lucu &amp; energik</option></select><span>gaya narasi</span></label>
-              <label class="pick"><select id="film-story-mode" required aria-describedby="film-story-hint"><option value="serial">cerita utuh bersambung</option><option value="standalone">clip mandiri</option></select><span>alur cerita</span></label>
-              <label class="pick"><select id="film-source-ratio" required><option value="none">no crop</option><option value="blackbar">crop black bar</option><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option><option value="auto" hidden>ukuran asli video (tersimpan)</option><option value="3:4" hidden>3:4 (tersimpan)</option></select><span>crop clip</span></label>
-              <label class="pick" id="film-background-pick"><select id="film-background" required><option value="blur">blur</option><option value="black">hitam</option><option value="white">putih</option></select><span>background</span></label>
               <label class="pick film-prompt"><input class="text-pick" id="film-prompt" type="text" maxlength="2000" placeholder="opsional" /><span>additional prompt</span></label>
             </div>
-            <p class="hint" id="film-story-hint">Satu rangkuman cerita utuh dibuat terlebih dahulu, lalu dibagi sesuai jumlah video / part. Durasi tiap part diupayakan mendekati batas yang dipilih.</p>
           </div>
         </div>
 
@@ -148,24 +146,23 @@
           <div class="step-inner">
             <p class="kicker"><span>clip</span></p>
             <div class="row cols-4">
+              <label class="pick"><select id="opt-ratio" required></select><span>output ratio</span></label>
+              <label class="pick"><select id="opt-clip-ratio" required><option value="none">no crop</option><option value="blackbar">crop black bar</option><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>crop clip</span></label>
+              <label class="pick"><select id="opt-background" required><option value="blur">blur</option><option value="black">hitam</option><option value="white">putih</option></select><span>background</span></label>
+              <label class="pick"><select id="opt-duration" required></select><span>duration</span></label>
               <label class="pick"><select id="opt-count" required></select><span>clips</span></label>
-              <label class="pick"><select id="opt-duration" required></select><span>max duration</span></label>
-              <label class="pick"><select id="opt-ratio" required></select><span>aspect ratio</span></label>
-              <div class="pick episode-pick">
-                <input class="text-pick" id="clip-dub-speed" aria-labelledby="clip-dub-speed-label" required type="number" min="1" max="2" step="0.1" value="1.0" />
-                <div class="episode-stepper">
-                  <button type="button" data-step-input="clip-dub-speed" data-step="1" aria-label="Percepat dubbing">▴</button>
-                  <button type="button" data-step-input="clip-dub-speed" data-step="-1" aria-label="Perlambat dubbing">▾</button>
-                </div>
-                <span id="clip-dub-speed-label">kecepatan dubbing · 1,0×–2,0×</span>
-              </div>
             </div>
           </div>
         </div>
 
         <div class="step" id="step-caption">
           <div class="step-inner">
-            <p class="kicker"><span>auto caption</span></p>
+            <p class="kicker"><span>preset saya</span></p>
+            <div class="row cols-3">
+              <label class="pick"><select id="video-preset"><option value="">pilih preset</option><option value="viral">Viral highlight</option><option value="podcast">Podcast clean</option><option value="karaoke">Karaoke warna</option><option value="box">Bold word box</option><option value="cinematic">Cerita sinematik</option></select><span>preset video</span></label>
+            </div>
+            <p class="hint" id="preset-hint" aria-live="polite"></p>
+            <p class="kicker caption-kicker"><span>auto caption</span></p>
             <div class="row cols-4">
               <label class="pick"><select id="opt-caption-mode" required><option value="word">per kata</option><option value="sentence" selected>per kalimat</option></select><span>tampilan caption</span></label>
               <label class="pick" id="caption-lines-pick"><select id="opt-caption-lines" required><option value="1">1 baris</option><option value="2" selected>2 baris</option><option value="3">3 baris</option></select><span>maksimal baris</span></label>
@@ -189,13 +186,26 @@
                 <button type="button" class="link file-pick" id="opt-image-pick" hidden>choose image</button>
                 <span>image</span>
               </div>
-              <label class="pick"><input class="text-pick" id="opt-thumb-text" type="text" maxlength="120" placeholder="tambahkan judul klip" /><span>teks thumbnail</span></label>
+              <div class="pick"><label for="opt-thumb-text-mode" class="sr-only">teks</label><select id="opt-thumb-text-mode"><option value="auto">auto</option><option value="manual">tulis judul</option><option value="none">no title</option></select><span>teks</span><input class="text-pick" id="opt-thumb-text" type="text" maxlength="120" placeholder="tulis judul" aria-label="tulis judul thumbnail" hidden /></div>
               <div class="pick frame-pick"><div class="frame" id="opt-thumb-position" role="group" aria-label="Posisi teks thumbnail"></div><span>position</span></div>
               <div class="pick"><select id="opt-title-style" required></select><span>title on thumbnail</span></div>
               <label class="pick"><select id="opt-thumb-number"><option value="off">tanpa urutan</option><option value="number">1, 2, 3…</option><option value="letter">A, B, C…</option><option value="episode">Ep. 1, Ep. 2, Ep. 3…</option><option value="part">Part 1, Part 2, Part 3…</option><option value="clip">Klip 1, Klip 2, Klip 3…</option></select><span>urutan thumbnail tiap klip</span></label>
-              <label class="pick" id="thumb-dubbing"><select id="opt-voice" required></select><span>dubbing</span></label>
+              <label class="pick" id="thumb-dubbing"><select id="opt-voice" required></select><span>vo judul</span></label>
             </div>
 
+            <p class="kicker branding-kicker"><span>background music</span></p>
+            <div class="music-row">
+              <div class="pick music-field">
+                <label class="sr-only" for="opt-music-url">tautan musik</label>
+                <input id="opt-music-url" class="text-pick" type="url" inputmode="url" placeholder="tempel tautan musik" />
+                <input id="opt-music" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac" hidden />
+                <div class="music-links"><button type="button" class="text-button" id="opt-music-pick">pilih musik</button><span id="opt-music-name"></span><button type="button" class="text-button" id="opt-music-remove" hidden>hapus</button></div>
+              </div>
+              <div class="music-output">
+                <div class="music-preview" id="music-preview" hidden><button type="button" id="music-play" aria-label="Putar musik">▶</button><div class="music-wave-wrap"><canvas id="music-wave" width="560" height="44" aria-label="Gelombang musik"></canvas><div id="music-selection" class="music-selection" hidden></div><input id="music-start" type="range" min="0" max="0" value="0" step="0.1" aria-label="Awal potongan musik" disabled /><span id="music-times" class="music-times"></span></div><audio id="music-audio" preload="metadata"></audio></div>
+                <span id="music-error" role="status"></span>
+              </div>
+            </div>
             <p class="kicker branding-kicker"><span>branding</span></p>
             <div class="row brand-row">
               <div class="pick">
@@ -276,8 +286,6 @@
         </div>
       </div>
       <p class="hint" id="editor-hint"></p>
-      <p id="editor-sequence"></p>
-      <div id="editor-story"></div>
       <ol class="editor-clips" id="editor-clips"></ol>
     </section>
 

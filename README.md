@@ -1,12 +1,14 @@
-# CLIPY.ID Client
+# CLIPY.ID
 
-Aplikasi web CLIPY.ID untuk membuat clip dari video YouTube atau video lokal. Repository ini berisi antarmuka dan backend klien; alat admin lisensi, arsip serial, dan kunci privat tidak disertakan.
+Aplikasi web **CLIPY.ID** untuk membuat clip pendek dan film cerita dari video YouTube maupun video lokal, lengkap dengan pemilihan momen otomatis, framing pembicara, subtitle & animasi caption, preset video, musik latar, thumbnail otomatis, dan branding.
+
+Repository ini khusus untuk **Client** (antarmuka web dan backend pemrosesan video). Alat admin lisensi, daftar serial key, dan kunci privat tidak disertakan di repository ini.
 
 ## Menjalankan di Windows
 
-Diperlukan Python, Node.js, FFmpeg dan FFprobe di PATH. Sediakan API key sendiri untuk layanan AI yang Anda gunakan.
+Diperlukan Python, Node.js, serta FFmpeg dan FFprobe di `PATH`.
 
-1. Di terminal pertama, jalankan backend:
+1. Jalankan backend API dari folder `server` (port **4748**):
 
    ```powershell
    cd server
@@ -15,7 +17,7 @@ Diperlukan Python, Node.js, FFmpeg dan FFprobe di PATH. Sediakan API key sendiri
    .\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 4748
    ```
 
-2. Ikuti petunjuk model framing di `server/README.md`. Di terminal kedua jalankan:
+2. Di terminal kedua, jalankan antarmuka web dari folder `web` (port **4747**):
 
    ```powershell
    cd web
@@ -23,10 +25,4 @@ Diperlukan Python, Node.js, FFmpeg dan FFprobe di PATH. Sediakan API key sendiri
    npm run dev
    ```
 
-3. Buka http://127.0.0.1:4747, masukkan API key dan pilih sumber video. Transkripsi lokal memerlukan model Whisper; unduhan pertama dapat memakan ruang dan waktu.
-
-Ini adalah kode aplikasi yang dijalankan sendiri, bukan layanan web yang sudah di-host. Jangan membuka backend ke internet sebelum autentikasi, isolasi pelanggan, dan keamanan data disiapkan. Data di `server/data/` serta API key di komputer lokal tidak disertakan dalam repository.
-
-## Pengakuan
-
-Sebagian animasi diadaptasi dari ascii-sharks; lihat `third-party/ascii-sharks-LICENSE.txt`.
+3. Buka **http://127.0.0.1:4747**, masukkan API key, dan pilih sumber video.

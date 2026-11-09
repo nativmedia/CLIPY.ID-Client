@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import tempfile
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -63,12 +65,12 @@ def download_audio(url: str, out_dir: Path, on_progress=None) -> Path:
     return found[0]
 
 
-def download_section(url: str, start: float, end: float, out: Path, on_progress=None) -> Path:
+def download_section(url: str, start: float, end: float, out: Path, on_progress=None, *, video_only: bool = False) -> Path:
     """Download just [start, end] of the video as MP4."""
     opts = {
-        "format": "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b",
+        "format": ("bv[height<=1080][ext=mp4]/bv[height<=1080]/b[height<=1080]/b" if video_only else
+                   "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b"),
         "merge_output_format": "mp4",
-        "outtmpl": str(out.with_suffix(".%(ext)s")),
         "download_ranges": download_range_func(None, [(start, end)]),
         # Cut exactly where asked instead of at the nearest keyframe. That re-encodes the
         # section; a few threads keep x264's memory use modest.
@@ -79,14 +81,41 @@ def download_section(url: str, start: float, end: float, out: Path, on_progress=
         "no_warnings": True,
         "progress_hooks": [_hook(on_progress)],
     }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.extract_info(url, download=True)
-    if not out.exists():
-        found = sorted(p for p in out.parent.glob(out.stem + ".*") if p.suffix in (".mp4", ".mkv", ".webm"))
-        if not found:
-            raise RuntimeError("clip download produced no file")
-        return found[0]
-    return out
+    # A 403 can occur while FFmpeg reads an extracted stream URL. Re-extract
+    # on retry and keep partial attempts separate from completed project files.
+    for attempt in range(3):
+        try:
+            with tempfile.TemporaryDirectory(prefix="clipy-section-", dir=out.parent) as folder:
+                temporary = Path(folder) / "section.mp4"
+                with yt_dlp.YoutubeDL({**opts, "outtmpl": str(temporary.with_suffix(".%(ext)s"))}) as ydl:
+                    ydl.extract_info(url, download=True)
+                candidates = [temporary.with_suffix(ext) for ext in (".mp4", ".mkv", ".webm")]
+                downloaded = next((path for path in candidates if path.is_file() and path.stat().st_size > 0), None)
+                if downloaded is None:
+                    raise RuntimeError("Pengunduhan potongan video tidak menghasilkan file")
+                if downloaded.suffix.lower() == out.suffix.lower():
+                    downloaded.replace(out)
+                    return out
+                # The alternate extension may already belong to another file.
+                # Reserve a unique destination before moving the completed download.
+                descriptor, name = tempfile.mkstemp(prefix=f"{out.stem}-", suffix=downloaded.suffix, dir=out.parent)
+                os.close(descriptor)
+                alternate = Path(name)
+                try:
+                    downloaded.replace(alternate)
+                except OSError:
+                    alternate.unlink(missing_ok=True)
+                    raise
+                return alternate
+        except yt_dlp.utils.DownloadError as exc:
+            message = str(exc).lower()
+            forbidden = ("3436169992" in message or "-858797304" in message
+                         or bool(re.search(r"\bhttp(?: error)?\s*403\b", message)))
+            if not forbidden:
+                raise
+            if attempt == 2:
+                raise RuntimeError("YouTube menolak akses video (HTTP 403). Coba lagi nanti atau pilih file video di komputer.") from exc
+            time.sleep(3 if attempt == 0 else 8)
 
 
 def cut_section(source: Path, start: float, end: float, out: Path, on_progress=None) -> Path:
@@ -381,25 +410,70 @@ def reframe(width: int, height: int, fit: str, plan=None, offset: float = 0.0, s
     return f"[0:v]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1[r]"
 
 
+
+def clip_frame_size(width: int, clip_ratio: str, source_ratio: float) -> tuple[int, int]:
+    """Fill the output width while maintaining the selected shape before canvas cropping."""
+    if clip_ratio in ("auto", "none", "blackbar"):
+        ratio = source_ratio
+    else:
+        w, h = clip_ratio.split(":")
+        ratio = int(w) / int(h)
+    if ratio <= 0:
+        raise ValueError("Video aspect ratio must be positive")
+    return width, max(2, round(width / ratio / 2) * 2)
+
+
+def composed_reframe(width: int, height: int, clip_ratio: str, background: str,
+                     source_ratio: float, plan=None, offset: float = 0.0,
+                     still_at: float | None = None) -> str:
+    """Reframe to the clip shape and place it on an output-width canvas."""
+    if background not in ("blur", "black", "white"):
+        raise ValueError("Unknown background")
+    fg_width, fg_height = clip_frame_size(width, clip_ratio, source_ratio)
+    # No crop preserves the whole source, including portrait sources on wide canvases.
+    if clip_ratio in ("none", "blackbar") and fg_height > height:
+        fg_height = height
+        fg_width = max(2, min(width, round(height * source_ratio / 2) * 2))
+    graph = reframe(fg_width, fg_height, "crop", plan, offset, still_at)
+    if fg_width == width and fg_height == height:
+        return graph
+    graph = graph.replace("[r]", "[framed]")
+    if fg_height > height:
+        return graph + f";[framed]crop={width}:{height},setsar=1[r]"
+    if background == "blur":
+        return (graph + ";[framed]split=2[compbgsrc][compfg];"
+                f"[compbgsrc]scale={width}:{height}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height},boxblur=24:2,eq=brightness=-0.12[compbg];"
+                "[compbg][compfg]overlay=(W-w)/2:(H-h)/2,setsar=1[r]")
+    return graph + f";[framed]pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={background},setsar=1[r]"
+
+
 def _run_ffmpeg(args: list[str], cwd: Path, duration: float, on_progress=None) -> None:
     """Run an encode, trying NVENC first and falling back to x264 (NVENC can fail when memory is tight)."""
     err = ""
     for encoder in video_encoders():
         cmd = ["ffmpeg", "-y", "-v", "error", *args[:-1], *encoder, *args[-1:]]
-        proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        assert proc.stdout
-        try:
-            for line in proc.stdout:
-                m = re.match(r"out_time_us=(\d+)", line)
-                if m and on_progress and duration:
-                    on_progress(min(1.0, int(m.group(1)) / 1e6 / duration))
-        except BaseException:
-            proc.kill()
+        # FFmpeg can write enough errors to fill a pipe before emitting progress.
+        # A file lets it write stderr while stdout is consumed, avoiding deadlock.
+        with tempfile.TemporaryFile(mode="w+t", encoding="utf-8", errors="replace") as errors:
+            proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=errors, text=True, encoding="utf-8", errors="replace")
+            assert proc.stdout
+            try:
+                for line in proc.stdout:
+                    m = re.match(r"out_time_us=(\d+)", line)
+                    if m and on_progress and duration:
+                        on_progress(min(1.0, int(m.group(1)) / 1e6 / duration))
+            except BaseException:
+                proc.kill()
+                proc.communicate()
+                raise
             proc.communicate()
-            raise
-        _, err = proc.communicate()
-        if proc.returncode == 0:
-            return
+            errors.seek(0, os.SEEK_END)
+            size = errors.tell()
+            errors.seek(max(0, size - 4096))
+            err = errors.read()
+            if proc.returncode == 0:
+                return
     raise RuntimeError(f"ffmpeg failed: {err.strip()[-400:]}")
 
 
@@ -424,7 +498,8 @@ TITLE_SECONDS = 3.0
 
 def render_clip(source: Path, ass: Path, out: Path, width: int, height: int, fit: str, on_progress=None,
                 brand: Path | None = None, brand_position: str = "bc", plan=None,
-                title: Path | None = None) -> Path:
+                title: Path | None = None, *, clip_ratio: str | None = None,
+                background: str = "blur", source_ratio: float | None = None) -> Path:
     """
     Reframe the clip (on the speaker when there's a plan), burn in the captions, stamp the
     branding mark (already built at its final size and opacity, see thumbs.build_brand), and
@@ -445,12 +520,15 @@ def render_clip(source: Path, ass: Path, out: Path, width: int, height: int, fit
         from .captions import for_stacked_panels
         render_ass = work / f"{ass.stem}.stacked.ass"
         render_ass.write_text(for_stacked_panels(ass.read_text(encoding="utf-8"), height), encoding="utf-8")
-    graph = reframe(width, height, fit, plan, offset if plan else 0.0) + f";[r]ass={render_ass.name}:fontsdir={fonts}[c0]"
+    graph = (composed_reframe(width, height, clip_ratio, background, source_ratio, plan, offset if plan else 0.0)
+             if clip_ratio is not None and source_ratio is not None
+             else reframe(width, height, fit, plan, offset if plan else 0.0))
+    graph += f";[r]ass={render_ass.name}:fontsdir={fonts}[c0]"
     last = "c0"
     if brand:
         x, y = brand_overlay_xy(brand_position, brand_margin(width, height))
         inputs += ["-i", os.path.relpath(brand, work)]
-        graph += f";[{len(inputs) // 2 - 1}:v]format=rgba[lg];[{last}][lg]overlay={x}:{y}:format=auto[c1]"
+        graph += f";[{sum(1 for a in inputs if a == '-i') - 1}:v]format=rgba[lg];[{last}][lg]overlay={x}:{y}:format=auto[c1]"
         last = "c1"
     if title:
         # A still held for the opening seconds, fading in fast and out gently.
@@ -472,12 +550,61 @@ def render_clip(source: Path, ass: Path, out: Path, width: int, height: int, fit
     return out
 
 
-def grab_frame(source: Path, out: Path, width: int, height: int, fit: str, plan=None) -> Path:
+def has_audio(path: Path) -> bool:
+    result = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=index", "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True)
+    return bool(result.stdout.strip())
+
+
+def mix_music(video: Path, music: Path, out: Path, start: float = 0, length: float | None = None) -> None:
+    """Duck music by 12 dB during non-silent audio and by 6 dB during silence."""
+    duration = probe_duration(video)
+    sound = has_audio(video)
+    active = []
+    if sound:
+        scan = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(video), "-af", "silencedetect=noise=-35dB:d=0.25", "-f", "null", "-"], capture_output=True, text=True, check=True)
+        cursor = 0.0
+        for line in scan.stderr.splitlines():
+            silence_start = re.search(r"silence_start:\s*([0-9.]+)", line)
+            silence_end = re.search(r"silence_end:\s*([0-9.]+)", line)
+            if silence_start:
+                point = min(duration, float(silence_start.group(1)))
+                if point > cursor:
+                    active.append((cursor, point))
+            if silence_end:
+                cursor = min(duration, float(silence_end.group(1)))
+            elif silence_start:
+                cursor = duration
+        if cursor < duration:
+            active.append((cursor, duration))
+    gain = "volume=-6dB" + "".join(f",volume=-6dB:enable='between(t,{start:.3f},{end:.3f})'" for start, end in active)
+    if sound:
+        graph = f"[1:a]{gain},aresample=48000[bg];[0:a]aresample=48000[voice];[voice][bg]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.891251[a]"
+    else:
+        graph = f"[1:a]{gain},aresample=48000,atrim=duration={duration:.3f}[a]"
+    with tempfile.TemporaryDirectory(prefix="clipy-music-cut-", dir=out.parent) as folder:
+        segment = Path(folder) / "segment.m4a"
+        music_duration = probe_duration(music)
+        start = max(0.0, float(start))
+        if start >= music_duration:
+            raise ValueError("Awal potongan musik melewati durasi musik")
+        segment_length = min(float(length) if length else music_duration, music_duration - start)
+        cut = subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{start:.3f}", "-i", str(music), "-t", f"{segment_length:.3f}", "-vn", "-c:a", "aac", "-b:a", "192k", str(segment)], capture_output=True, text=True)
+        if cut.returncode:
+            raise RuntimeError(f"Tidak dapat memotong musik: {cut.stderr.strip()[-500:]}")
+        result = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(video), "-stream_loop", "-1", "-i", str(segment), "-filter_complex", graph, "-map", "0:v:0", "-map", "[a]", "-c:v", "copy", *AUDIO, "-t", f"{duration:.3f}", "-movflags", "+faststart", str(out)], capture_output=True, text=True)
+        if result.returncode:
+            raise RuntimeError(f"Tidak dapat mencampur musik: {result.stderr.strip()[-500:]}")
+
+
+def grab_frame(source: Path, out: Path, width: int, height: int, fit: str, plan=None, *,
+               clip_ratio: str | None = None, background: str = "blur", source_ratio: float | None = None) -> Path:
     """A representative frame of the clip, reframed like the short (no captions), for the thumbnail."""
     duration = probe_duration(source)
     # Skip the very first moments, which are often mid-cut.
     seek = min(1.5, duration / 4)
-    graph = reframe(width, height, fit, plan, still_at=seek) + ";[r]thumbnail=30[v]"
+    graph = (composed_reframe(width, height, clip_ratio, background, source_ratio, plan, still_at=seek)
+             if clip_ratio is not None and source_ratio is not None
+             else reframe(width, height, fit, plan, still_at=seek)) + ";[r]thumbnail=30[v]"
     subprocess.run(
         ["ffmpeg", "-y", "-v", "error", "-ss", f"{seek:.2f}", "-i", str(source),
          "-filter_complex", graph, "-map", "[v]", "-frames:v", "1", "-q:v", "2", str(out)],
@@ -492,7 +619,7 @@ def add_intro(clip: Path, image: Path, voice: Path, out: Path, width: int, heigh
     graph = (
         f"[0:v]scale={width}:{height},setsar=1,fps={FPS},format=yuv420p,"
         f"fade=t=out:st={intro - 0.25:.2f}:d=0.25[iv];"
-        f"[1:a]aresample=48000,aformat=channel_layouts=stereo,apad=whole_dur={intro:.2f}[ia];"
+        f"[1:a]loudnorm=I=-16:TP=-2:LRA=11,aresample=48000,aformat=channel_layouts=stereo,apad=whole_dur={intro:.2f}[ia];"
         f"[2:v]fps={FPS},format=yuv420p,setsar=1[cv];"
         "[2:a]aresample=48000,aformat=channel_layouts=stereo[ca];"
         "[iv][ia][cv][ca]concat=n=2:v=1:a=1[v][a]"

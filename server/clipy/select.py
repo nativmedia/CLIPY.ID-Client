@@ -213,8 +213,15 @@ def _complete(words: list[Word], start: float, end: float, max_duration: float, 
 
     if end - start >= shortest:
         # Long enough: just make sure it stops at the end of a sentence, not mid-thought.
-        nearest = candidates[0]
-        return round(nearest[0], 3) if nearest[0] - end <= 6 else end
+        sentence_ends = [
+            min(w.end + 0.25, words[i + 1].start if i + 1 < len(words) else float("inf"))
+            for i, w in enumerate(words)
+            if w.end <= (words[i + 1].start if i + 1 < len(words) else float("inf"))
+            and end - 0.05 <= min(w.end + 0.25, words[i + 1].start if i + 1 < len(words) else float("inf")) <= limit
+            and w.text.rstrip().endswith((".", "?", "!"))
+        ]
+        nearest = sentence_ends[0] if sentence_ends else candidates[0][0]
+        return round(nearest, 3)
 
     # Too short: among the ends that reach the shortest length, take the clearest wind-down
     # (longest pause); if none reach it, the clearest one available.

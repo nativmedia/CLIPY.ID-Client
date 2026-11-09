@@ -181,7 +181,7 @@ def _validate_plan(result, duration, config):
             shot["start"], shot["end"] = start, end
             last_start, last_end = start, end
             total += end - start
-        ceiling = config["max_duration"] - (0.15 if config.get("story_mode", "serial") == "serial" else 0)
+        ceiling = config["max_duration"] - (0.15 if config.get("story_mode", "standalone") == "serial" else 0)
         if total > ceiling:
             raise ValueError(f"Episode {ep_index}: shots total {total:g}s exceeds {ceiling:g}s (encoding headroom)")
     return output
@@ -214,7 +214,7 @@ def plan(words, duration, config, *, speed=1.0):
         "required": ["title", "narration", "shots"]}}}, "required": ["protagonist", "throughline", "episodes"]}
     limit = config["max_duration"]
     target = min(limit - 1, duration / episodes)
-    serial = config.get("story_mode", "serial") == "serial"
+    serial = config.get("story_mode", "standalone") == "serial"
     floor = max(0, target - 2) if serial else target * 0.82
     story_parts = None
     if serial:
@@ -416,6 +416,90 @@ def _serial_duration_limit(project, config):
     return limit
 
 
+def _video_stream(path):
+    """Read the codec configuration needed to join independently encoded shots."""
+    result = subprocess.run([
+        "ffprobe", "-v", "error", "-select_streams", "v:0", "-show_data_hash", "sha256",
+        "-show_entries", "stream=codec_name,profile,level,width,height,pix_fmt,time_base,r_frame_rate,extradata_hash,start_time,duration,nb_frames",
+        "-of", "json", str(path),
+    ], capture_output=True, text=True, check=True, timeout=30)
+    streams = json.loads(result.stdout).get("streams", [])
+    if len(streams) != 1:
+        raise ValueError("Video stream tidak dapat diperiksa")
+    return streams[0]
+
+
+def _matching_shots(parts, frame_counts):
+    """Only stream-copy when codec setup and every shot timestamp are exact."""
+    fields = ("codec_name", "profile", "level", "width", "height", "pix_fmt", "time_base", "r_frame_rate", "extradata_hash")
+    reference = None
+    for part, expected in zip(parts, frame_counts, strict=True):
+        stream = _video_stream(part)
+        signature = tuple(stream.get(key) for key in fields)
+        if any(value is None for value in signature) or stream.get("codec_name") != "h264" or stream.get("r_frame_rate") != f"{media.FPS}/1":
+            return False
+        if reference is not None and signature != reference:
+            return False
+        reference = signature
+        start = float(stream.get("start_time", -1))
+        duration = float(stream.get("duration", -1))
+        if not math.isfinite(start) or not math.isfinite(duration):
+            return False
+        if int(stream.get("nb_frames", -1)) != expected or abs(start) > .002:
+            return False
+        if abs(duration - expected / media.FPS) > .003:
+            return False
+        probe = subprocess.run([
+            "ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "packet=pts_time",
+            "-of", "json", str(part),
+        ], capture_output=True, text=True, check=True, timeout=30)
+        timestamps = sorted(float(packet["pts_time"]) for packet in json.loads(probe.stdout).get("packets", []))
+        if len(timestamps) != expected or any(not math.isfinite(t) or abs(t - i / media.FPS) > .002 for i, t in enumerate(timestamps)):
+            return False
+    return bool(reference)
+
+
+def _copy_episode(parts, frame_counts, concat, voice, draft, total_frames):
+    """Fast concat when it preserves the same frame and voice timing; otherwise fall back."""
+    pending = draft.with_name(draft.stem + "_copy.pending.mp4")
+    try:
+        if (len(parts) != len(frame_counts) or sum(frame_counts) != total_frames
+                or not _matching_shots(parts, frame_counts)):
+            return False
+        seconds = total_frames / media.FPS
+        result = subprocess.run([
+            "ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(concat),
+            "-i", str(voice), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+            "-af", "loudnorm=I=-16:TP=-2:LRA=11", "-c:a", "aac", "-t", f"{seconds:.6f}",
+            "-movflags", "+faststart", str(pending),
+        ], capture_output=True, text=True, timeout=300)
+        if result.returncode:
+            return False
+        if not _matching_shots([pending], [total_frames]):
+            return False
+        audio = subprocess.run([
+            "ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=start_time,duration",
+            "-of", "json", str(pending),
+        ], capture_output=True, text=True, check=True, timeout=30)
+        streams = json.loads(audio.stdout).get("streams", [])
+        if len(streams) != 1:
+            return False
+        start = float(streams[0].get("start_time", -1))
+        duration = float(streams[0].get("duration", -1))
+        if not math.isfinite(start) or not math.isfinite(duration) or abs(start) > .03:
+            return False
+        expected_audio = min(seconds, media.probe_duration(voice))
+        if not math.isfinite(expected_audio) or abs(duration - expected_audio) > .1:
+            return False
+        pending.replace(draft)
+        return True
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError):
+        LOG.info("Fast episode concat unavailable; using normal encoding", exc_info=True)
+        return False
+    finally:
+        pending.unlink(missing_ok=True)
+
+
 def render(p, clip, opts, config):
     """Time shot groups against the synthesized voice-over before rendering."""
     d = p.dir
@@ -493,13 +577,15 @@ def render(p, clip, opts, config):
             raise ValueError(f"Episode {n}: narration still exceeds the available footage")
     # Retain the planned footage duration even if narration finishes early. The
     # last word and the encoded voice file must both fit before the final frame.
-    duration_limit = _serial_duration_limit(p, config) if serial else config["max_duration"]
-    try:
-        total_frames = _episode_frames(total, voice_duration, words, duration_limit, len(shots))
-    except ValueError as exc:
-        if serial:
+    if serial:
+        duration_limit = _serial_duration_limit(p, config)
+        try:
+            total_frames = _episode_frames(total, voice_duration, words, duration_limit, len(shots))
+        except ValueError as exc:
             raise ValueError(f"Episode {n}: narasi tidak muat dalam {duration_limit:.1f} detik tanpa memotong kata; coba ubah durasi atau kecepatan narator lalu generate ulang") from exc
-        raise
+    else:
+        target_duration = min(total, voice_duration + 0.5)
+        total_frames = max(len(shots), math.ceil(target_duration * media.FPS))
     cuts = _narration_cuts(shots, words, source_words)
     frame_counts = _shot_frames(durations, words, cuts, total_frames)
     local = p.local_video if p.upload_id else None
@@ -511,7 +597,7 @@ def render(p, clip, opts, config):
         if p.upload_id:
             src = media.cut_section(p.local_video, shot["start"], shot["end"], src)
         else:
-            src = media.download_section(p.url, shot["start"], shot["end"], src)
+            src = media.download_section(p.url, shot["start"], shot["end"], src, video_only=True)
         part = d / f"film_{n}_part_{i}.mp4"
         target = frames / media.FPS
         stretch = max(1.0, target / durations[i])
@@ -535,7 +621,9 @@ def render(p, clip, opts, config):
     concat = d / f"film_{n}_list.txt"
     concat.write_text("".join(f"file '{part.name}'\n" for part in parts), encoding="utf-8")
     draft = d / f"film_{n}_draft.mp4"
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(concat), "-i", str(voice), "-vf", f"setpts=N/({media.FPS}*TB)", "-af", "apad", "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264", "-preset", "fast", "-c:a", "aac", "-t", f"{total_frames / media.FPS:.6f}", "-movflags", "+faststart", str(draft)], check=True)
+    if not _copy_episode(parts, frame_counts, concat, voice, draft, total_frames):
+        af = "apad" if serial else "loudnorm=I=-16:TP=-2:LRA=11"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(concat), "-i", str(voice), "-vf", f"setpts=N/({media.FPS}*TB)", "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264", "-preset", "fast", "-af", af, "-c:a", "aac", "-t", f"{total_frames / media.FPS:.6f}", "-movflags", "+faststart", str(draft)], check=True)
     ass = d / f"film_{n}.ass"
     ass.write_text(captions.build_ass(words, opts["style"], width, height), encoding="utf-8")
     srt = d / f"clip_{n}.srt"
@@ -545,6 +633,10 @@ def render(p, clip, opts, config):
     if media.probe_duration(out) > config["max_duration"]:
         out.unlink(missing_ok=True)
         raise ValueError(f"Episode {n}: final video exceeds the maximum duration")
+    if getattr(p, "music", None):
+        mixed = d / f"clip_{n}_music.mp4"
+        media.mix_music(out, d / p.music, mixed, start=p.settings.get("music_start", 0), length=p.settings.get("music_length"))
+        mixed.replace(out)
     frame = d / f"film_{n}_frame.jpg"
     if opts["thumb_cfg"].get("source") == "upload" and p.upload:
         thumbs.prepare(d / p.upload, frame, width, height)
@@ -552,7 +644,8 @@ def render(p, clip, opts, config):
         media.grab_frame(parts[0], frame, width, height, "crop")
     thumb = d / f"thumb_{n}.jpg"
     thumb_cfg = opts["thumb_cfg"]
-    thumbs.add_title(frame, thumb, clip["title"], thumb_cfg.get("title_style", "bold"), custom_text=thumb_cfg.get("text", ""),
+    title_text = thumbs.thumbnail_text(thumb_cfg, clip, narration)
+    thumbs.add_title(frame, thumb, clip["title"], "none" if thumb_cfg.get("text_mode") == "none" else thumb_cfg.get("title_style", "bold"), custom_text=title_text,
                      number=n, sequence=thumb_cfg.get("sequence") or ("number" if thumb_cfg.get("numbered") else "off"),
                      position=thumb_cfg.get("position"))
     if opts["brand"]:

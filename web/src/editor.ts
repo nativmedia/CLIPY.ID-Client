@@ -32,16 +32,27 @@ export type Project = {
   transcription_note?: string | null;
   settings: {
     mode?: string;
-    film?: { episodes: number; max_duration: number; style: string; voice: string; story_mode?: "serial" | "standalone"; story_summary?: string; source_ratio?: string; background?: string; additional_prompt?: string } | null;
+    film?: { episodes: number; max_duration: number; style: string; voice: string; source_ratio?: string; background?: string; additional_prompt?: string } | null;
     mood?: string;
-    clip: { ratio: string; fit: string; count: number; max_duration: number; dubbing_speed?: number };
+    music_start?: number;
+    music_length?: number | null;
+    clip: { ratio: string; fit: string; count: number; max_duration: number; dubbing_speed?: number; clip_ratio?: string | null; background?: string | null };
     caption: { font: string; animation: string; color: string; case: string; position?: number | null; display?: string | null; text_style?: string; max_lines?: number };
-    thumb: { source: string; title_style: string; text?: string; numbered?: boolean; sequence?: string | null; position?: string | null; voice: string | null };
+    thumb: { source: string; title_style: string; text?: string; text_mode?: "auto" | "manual" | "none"; numbered?: boolean; sequence?: string | null; position?: string | null; voice: string | null };
     brand?: { position: string; text?: string; style?: string; opacity?: number };
   };
   has_logo?: boolean;
+  music?: string | null;
   clips: Clip[];
 };
+
+export function clipLayout(settings: Project["settings"]): string {
+  const film = settings.mode === "filming" ? settings.film : null;
+  const crop = film?.source_ratio ?? settings.clip.clip_ratio;
+  const background = film?.background ?? settings.clip.background;
+  if (crop != null) return `${settings.clip.ratio} · ${crop === "auto" ? "ukuran asli" : crop === "none" ? "no crop" : crop} · ${background ?? "blur"}`;
+  return `${settings.clip.ratio} ${settings.clip.fit === "crop" ? "crop" : "no crop"}`;
+}
 
 type Platforms = Record<string, { fields: Record<string, number> }>;
 const platformLabels = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", facebook: "Facebook", x: "X" };
@@ -64,12 +75,6 @@ export const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s
 export async function retryClip(projectId: string, n: number) {
   const res = await fetch(`/api/projects/${projectId}/clips/${n}/retry`, { method: "POST" });
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.detail ?? `status ${res.status}`);
-}
-
-/** Browser download starts after the server has combined the completed clips. */
-export function sequenceLink(p: Project): HTMLAnchorElement | null {
-  if (!["done", "error", "cancelled"].includes(p.status) || !p.clips.some((c) => c.status === "done" && c.video)) return null;
-  return el("a", { className: "text-button sequence-download", href: `/api/projects/${encodeURIComponent(p.id)}/clip-sequence`, download: "", textContent: "download clip sequence", title: "Gabungkan semua klip yang selesai tanpa intro thumbnail; pembuatan dapat memakan waktu" });
 }
 
 let platforms: Platforms | null = null;
@@ -243,6 +248,9 @@ function clipCard(p: Project, c: Clip, spec: Platforms, posts: Posts | null): HT
   if (c.srt) actions.append(el("a", { className: "text-button", href: c.srt, download: "", textContent: "srt" }));
   if (c.status === "error") {
     const retry = el("button", { type: "button", className: "text-button warn", textContent: "retry" });
+    const running = !["done", "error", "cancelled"].includes(p.status);
+    retry.disabled = running;
+    if (running) retry.textContent = "tunggu proses selesai";
     retry.addEventListener("click", async () => {
       retry.disabled = true;
       retry.textContent = "retrying…";
@@ -251,6 +259,7 @@ function clipCard(p: Project, c: Clip, spec: Platforms, posts: Posts | null): HT
         followUntilDone(p.id);
       } catch (err) {
         retry.textContent = `retry failed: ${(err as Error).message}`;
+        retry.disabled = false;
       }
     });
     actions.append(retry);
@@ -281,9 +290,15 @@ function followUntilDone(id: string) {
   clearTimeout(follow);
   follow = window.setTimeout(async () => {
     if (editing !== id) return;
-    const p: Project = await (await fetch(`/api/projects/${id}`)).json();
-    if (p.status === "done" || p.status === "error") renderEditor(id);
-    else followUntilDone(id);
+    try {
+      const response = await fetch(`/api/projects/${id}`);
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const p: Project = await response.json();
+      if (["done", "error", "cancelled"].includes(p.status)) void renderEditor(id);
+      else followUntilDone(id);
+    } catch {
+      if (editing === id) followUntilDone(id);
+    }
   }, 2000);
 }
 
@@ -294,7 +309,6 @@ async function renderEditor(id: string) {
   const [res, spec] = await Promise.all([fetch(`/api/projects/${id}`), getPlatforms()]);
   if (!res.ok) {
     editorClips.replaceChildren();
-    $<HTMLElement>("#editor-story").replaceChildren();
     editorHint.textContent = "project not found";
     editorHint.classList.add("error");
     return;
@@ -304,15 +318,9 @@ async function renderEditor(id: string) {
   $<HTMLElement>("#editor-title").textContent = p.title || p.url;
   const s = p.settings;
   $<HTMLElement>("#editor-meta").replaceChildren(
-    `${s.clip.ratio} ${s.clip.fit === "crop" ? "crop" : "no crop"} · ${p.clips.filter((c) => c.status === "done").length}/${p.clips.length} clips · `,
+    `${clipLayout(s)} · ${p.clips.filter((c) => c.status === "done").length}/${p.clips.length} clips · `,
     p.url ? el("a", { href: p.url, target: "_blank", rel: "noopener", textContent: "source video" }) : "uploaded video",
   );
-  $<HTMLElement>("#editor-sequence").replaceChildren(...[sequenceLink(p)].filter((node): node is HTMLAnchorElement => node !== null));
-  const story = s.mode === "filming" ? s.film?.story_summary?.trim() : "";
-  $<HTMLElement>("#editor-story").replaceChildren(...(story ? [el("details", { className: "editor-story" },
-    el("summary", { textContent: "Lihat rangkuman cerita utuh" }),
-    el("p", { textContent: story }),
-  )] : []));
 
   const draw = (posts: Posts | null) => editorClips.replaceChildren(...p.clips.map((c) => clipCard(p, c, spec, posts)));
   draw(null);
