@@ -1314,3 +1314,20 @@ body.locked { overflow: hidden; }
 }
 .desktop-update-link[hidden] { display: none; }
 .desktop-update-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Keep form actions and selection controls usable on narrow touch screens. */
+@media (max-width: 720px) {
+  .option-list { inset-block-start: 52px; max-height: min(60dvh, 420px); overflow-y: auto; overscroll-behavior: contain; }
+  .option-preview { min-height: 44px; }
+  .music-links, #opt-music-name { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .music-preview button { flex: 0 0 44px; width: 44px; height: 44px; }
+  .music-wave-wrap { flex: 1 1 0; }
+  #music-error { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+}
+
+@media (max-width: 480px) {
+  #key-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0; }
+  #key-form::after { display: none; }
+  #key-form #key { width: 100%; min-width: 0; border-bottom: 1px solid var(--line); }
+  #key-insert { justify-self: start; max-width: 100%; --bw: min(24px, calc((100vw - 48px) / 6)); }
+}
