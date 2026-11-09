@@ -1501,19 +1501,16 @@ const videoPresets: Record<string, {animation: string; color: string; display: s
   karaoke: {animation: "karaoke", color: "cyan", display: "sentence", textStyle: "outline", letterCase: "sentence", title: "underline", font: "montserrat", description: "Warna mengikuti kata yang diucapkan."},
   box: {animation: "box", color: "yellow", display: "sentence", textStyle: "outline", letterCase: "upper", title: "box", font: "montserrat", description: "Kotak menonjolkan kata aktif."},
   cinematic: {animation: "fade", color: "white", display: "sentence", textStyle: "shadow", letterCase: "sentence", title: "shadow", font: "montserrat", description: "Tampilan sederhana agar visual cerita tetap menonjol."},
+  edukasi: {animation: "reveal", color: "green", display: "sentence", textStyle: "outline", letterCase: "sentence", title: "bold", font: "poppins", description: "Tegas dan mudah dibaca untuk materi penjelasan."},
+  neon: {animation: "glow", color: "cyan", display: "word", textStyle: "shadow", letterCase: "upper", title: "stamp", font: "bangers", description: "Kontras cepat dengan aksen neon untuk momen energik."},
+  minimal: {animation: "fade", color: "white", display: "sentence", textStyle: "plain", letterCase: "sentence", title: "none", font: "poppins", description: "Caption ringan dengan tampilan visual yang paling bersih."},
 };
 const videoPreset = $<HTMLSelectElement>("#video-preset");
 videoPreset.addEventListener("change", () => {
   const preset = videoPresets[videoPreset.value];
   if (!preset || !options) return;
-  // Preserve user-provided source, title, logo, branding and narrator selections.
-  if (mode === "filming") {
-    filmRatio.value = "9:16"; filmEpisodes.value = "4"; filmDuration.value = "60";
-    setFilmCrop("none"); filmBackground.value = "blur"; filmDubSpeed.value = "1.0";
-    filmStyle.value = preset === videoPresets.cinematic ? "dramatis dan sinematik" : "informatif dan jelas";
-  } else {
-    sel.ratio.value = "9:16"; setClipCrop("none"); clipBackground.value = "blur"; sel.count.value = "4"; sel.duration.value = "60";
-  }
+  // Presets intentionally affect only the manual caption and thumbnail controls below.
+  // Mood and all clip/filming settings above remain exactly as the user chose them.
   sel.font.value = preset.font; sel.animation.value = preset.animation; sel.case.value = preset.letterCase;
   captionMode.value = preset.display; captionLines.value = "2"; captionPosition.value = "5";
   captionTextStyle.value = preset.textStyle; color = preset.color;
@@ -1530,8 +1527,7 @@ function clearVideoPreset() {
   videoPreset.value = "";
   $<HTMLElement>("#preset-hint").textContent = "";
 }
-[filmRatio, filmEpisodes, filmDuration, filmSourceRatio, filmBackground, filmDubSpeed, filmStyle,
- sel.ratio, clipRatio, clipBackground, sel.count, sel.duration, sel.font, sel.animation, sel.case, captionMode,
+[sel.font, sel.animation, sel.case, captionMode,
  captionLines, captionPosition, captionTextStyle, sel.titleStyle].forEach(field => {
   field.addEventListener("input", clearVideoPreset);
   field.addEventListener("change", clearVideoPreset);
