@@ -269,7 +269,6 @@ export class Marquee {
     ctx.font = `800 ${Math.round(ch * 0.8)}px ${FONT}`;
     ctx.save();
     ctx.globalAlpha = 0.4;
-    this.drawBand(this.bandTop, travel, t, 1);
     this.drawBand(this.bandBottom, -travel, t, 2);
     ctx.restore();
   }
@@ -283,7 +282,7 @@ export class Marquee {
   }
 
   private underText(c: number, r: number, travel: number) {
-    return this.coverage(this.bandTop, travel, c, r) >= 0.12 || this.coverage(this.bandBottom, -travel, c, r) >= 0.12;
+    return this.coverage(this.bandBottom, -travel, c, r) >= 0.12;
   }
 
   /**
