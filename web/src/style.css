@@ -1022,9 +1022,17 @@ body.locked { overflow: hidden; }
   backdrop-filter: blur(2px);
 }
 .editor[hidden] { display: none; }
-.editor-head { display: flex; align-items: baseline; gap: 22px; margin-bottom: 22px; }
+.editor-head { display: flex; align-items: center; gap: 22px; margin-bottom: 22px; }
 .editor-head .text-button { font-size: 12px; }
-.editor-head #editor-back { padding: 9px 14px; border: 1px solid var(--line); background: var(--surface-2); text-decoration: none; }
+.editor-head #editor-back {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 8px 14px;
+  border: 1px solid var(--line); background: var(--surface-2); text-decoration: none;
+}
+.editor-back-icon {
+  display: block; flex: 0 0 18px; width: 18px; height: 18px;
+  fill: none; stroke: currentColor; stroke-linecap: square; stroke-linejoin: miter; stroke-width: 3;
+}
 .editor-head #editor-back:hover { border-color: var(--accent); color: var(--accent); }
 .editor-head #editor-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .editor-head .kicker { margin: 0; }
