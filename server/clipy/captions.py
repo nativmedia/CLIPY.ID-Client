@@ -47,6 +47,10 @@ FONTS = {
     "bebas": ("Bebas Neue", "Bebas Neue"),
     "poppins": ("Poppins", "Poppins Black"),
     "bangers": ("Bangers", "Bangers"),
+    "just-me": ("Just Me Again Down Here", "Just Me Again Down Here"),
+    "instrument-serif": ("Instrument Serif", "Instrument Serif"),
+    "jetbrains-mono": ("JetBrains Mono", "JetBrains Mono"),
+    "gaegu": ("Gaegu", "Gaegu"),
 }
 ANIMATIONS = {
     "highlight": "Word highlight",
@@ -59,8 +63,15 @@ ANIMATIONS = {
     "fade": "Fade",
 }
 FONT_FILES = {
-    "montserrat": "Montserrat-Black.ttf", "anton": "Anton-Regular.ttf",
-    "bebas": "BebasNeue-Regular.ttf", "poppins": "Poppins-Black.ttf", "bangers": "Bangers-Regular.ttf",
+    "montserrat": "Montserrat-Black.ttf",
+    "anton": "Anton-Regular.ttf",
+    "bebas": "BebasNeue-Regular.ttf",
+    "poppins": "Poppins-Black.ttf",
+    "bangers": "Bangers-Regular.ttf",
+    "just-me": "JustMeAgainDownHere.ttf",
+    "instrument-serif": "InstrumentSerif-Regular.ttf",
+    "jetbrains-mono": "JetBrainsMono[wght].ttf",
+    "gaegu": "Gaegu-Regular.ttf",
 }
 FONT_DIR = Path(__file__).resolve().parent.parent / "fonts"
 

@@ -5,6 +5,21 @@ from clipy import captions
 
 
 class CaptionAnimationTests(unittest.TestCase):
+    def test_added_caption_fonts_have_assets_and_ass_families(self):
+        expected = {
+            "just-me": ("Just Me Again Down Here", "Just Me Again Down Here"),
+            "instrument-serif": ("Instrument Serif", "Instrument Serif"),
+            "jetbrains-mono": ("JetBrains Mono", "JetBrains Mono"),
+            "gaegu": ("Gaegu", "Gaegu"),
+        }
+        words = [captions.Word("Halo", 0, .4)]
+        for name, (label, family) in expected.items():
+            with self.subTest(font=name):
+                self.assertEqual(captions.OPTIONS["fonts"][name], label)
+                self.assertTrue((captions.FONT_DIR / captions.FONT_FILES[name]).is_file())
+                ass = captions.build_ass(words, captions.CaptionStyle(font=name), 360, 640)
+                self.assertIn(f"Style: Cap,{family},", ass)
+
     def test_word_glow_keeps_sharp_glyphs_above_the_translucent_halo(self):
         words = [captions.Word("Paul", 0, .4)]
         for display in ("word", "sentence"):

@@ -576,11 +576,19 @@ body.locked { overflow: hidden; }
 @font-face { font-family: "Clipy Bebas"; src: url("/fonts/BebasNeue-Regular.ttf") format("truetype"); font-display: swap; }
 @font-face { font-family: "Clipy Poppins"; src: url("/fonts/Poppins-Black.ttf") format("truetype"); font-display: swap; }
 @font-face { font-family: "Clipy Bangers"; src: url("/fonts/Bangers-Regular.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "Clipy Just Me"; src: url("/fonts/JustMeAgainDownHere.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "Clipy Instrument Serif"; src: url("/fonts/InstrumentSerif-Regular.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "Clipy JetBrains Mono"; src: url("/fonts/JetBrainsMono[wght].ttf") format("truetype"); font-weight: 100 800; font-display: swap; }
+@font-face { font-family: "Clipy Gaegu"; src: url("/fonts/Gaegu-Regular.ttf") format("truetype"); font-display: swap; }
 .font-pick [data-font="montserrat"] { font-family: "Clipy Montserrat", sans-serif; }
 .font-pick [data-font="anton"] { font-family: "Clipy Anton", sans-serif; }
 .font-pick [data-font="bebas"] { font-family: "Clipy Bebas", sans-serif; }
 .font-pick [data-font="poppins"] { font-family: "Clipy Poppins", sans-serif; }
 .font-pick [data-font="bangers"] { font-family: "Clipy Bangers", sans-serif; }
+.font-pick [data-font="just-me"] { font-family: "Clipy Just Me", cursive; }
+.font-pick [data-font="instrument-serif"] { font-family: "Clipy Instrument Serif", serif; }
+.font-pick [data-font="jetbrains-mono"] { font-family: "Clipy JetBrains Mono", monospace; }
+.font-pick [data-font="gaegu"] { font-family: "Clipy Gaegu", cursive; }
 .font-pick .option-preview { font-size: 15px; }
 .font-pick .option-list,
 .preview-pick:has(#opt-brand-style) .option-list {
