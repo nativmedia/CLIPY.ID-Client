@@ -81,14 +81,43 @@ const player = $<HTMLDivElement>("#player");
 const play = $<HTMLButtonElement>("#play");
 const uploadInput = $<HTMLInputElement>("#upload-input");
 const uploadPick = $<HTMLButtonElement>("#upload-pick");
+const exportPick = $<HTMLButtonElement>("#export-pick");
+const exportLocation = $<HTMLElement>("#export-location");
 // A local page can ask the server to select a file without copying it.
 // Remote visitors instead select a file in their own browser and upload it.
 const serverIsLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+let exportDir = "";
 const subtitleUpload = $<HTMLElement>("#subtitle-upload");
 const subtitleInput = $<HTMLInputElement>("#subtitle-input");
 const subtitlePick = $<HTMLButtonElement>("#subtitle-pick");
 const subtitleName = $<HTMLElement>("#subtitle-name");
 const subtitleRemove = $<HTMLButtonElement>("#subtitle-remove");
+
+async function chooseExportDirectory() {
+  exportPick.disabled = true;
+  exportLocation.textContent = "membuka pemilih folder…";
+  try {
+    const res = await fetch("/api/export-directory/choose", { method: "POST" });
+    if (res.status === 204) {
+      exportLocation.textContent = exportDir ? `hasil → ${exportDir}` : "folder hasil belum dipilih";
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || typeof data.path !== "string") throw new Error(typeof data.detail === "string" ? data.detail : "Folder tidak dapat dipilih");
+    exportDir = data.path;
+    exportLocation.textContent = `hasil → ${exportDir}`;
+  } catch (err) {
+    exportLocation.textContent = (err as Error).message;
+  } finally {
+    exportPick.disabled = !serverIsLocal;
+  }
+}
+
+exportPick.addEventListener("click", () => void chooseExportDirectory());
+if (!serverIsLocal) {
+  exportPick.disabled = true;
+  exportLocation.textContent = "Save As tersedia saat membuka CLIPY di komputer ini";
+}
 
 function clearSubtitle() {
   subtitleInput.value = "";
@@ -1215,6 +1244,7 @@ startButton.addEventListener("click", async () => {
       body.append("url", input.value.trim());
     }
     body.append("settings", JSON.stringify(settings()));
+    if (exportDir) body.append("export_dir", exportDir);
     if (mode === "filming" && subtitleInput.files?.[0]) body.append("subtitle", subtitleInput.files[0]);
     if (sel.source.value === "upload" && imageInput.files?.[0]) body.append("image", imageInput.files[0]);
     if (logoInput.files?.[0]) body.append("logo", logoInput.files[0]);

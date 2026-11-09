@@ -65,6 +65,10 @@ class Project:
     upload_id: str | None = None
     # Set when this is a re-clip of a video done before: that project's transcript is reused.
     reuse_from: str | None = None
+    # A folder explicitly picked by the local user for a copy of completed results.
+    export_dir: str | None = None
+    export_status: str | None = None
+    export_error: str | None = None
     created: float = field(default_factory=time.time)
 
     @property
@@ -80,12 +84,23 @@ class Project:
     def dir(self) -> Path:
         return DATA_DIR / self.id
 
+    @property
+    def export_output_dir(self) -> Path | None:
+        if not self.export_dir:
+            return None
+        safe_title = "".join(ch if ch.isalnum() or ch in " -_" else " " for ch in self.title).strip()
+        safe_title = "-".join(safe_title.split())[:60] or "project"
+        return Path(self.export_dir) / f"CLIPY-{safe_title}-{self.id}"
+
     def file_url(self, name: str) -> str:
         return f"/api/projects/{self.id}/files/{name}"
 
     def public(self) -> dict:
         d = asdict(self)
         d.pop("upload")
+        d.pop("export_dir")
+        d["has_export_dir"] = self.export_output_dir is not None
+        d["export_ready"] = bool(self.export_output_dir and self.export_output_dir.is_dir())
         d["has_logo"] = bool(d.pop("logo"))
         d["progress"] = round(self.progress, 3)
         # Always the source video's own thumbnail, so projects are easy to recognise.
@@ -193,17 +208,19 @@ def _load(*, interrupted: bool = False) -> None:
 
 
 def create(url: str, video_id: str, settings: dict, upload_id: str | None = None, title: str = "",
-           reuse_from: str | None = None) -> Project:
+           reuse_from: str | None = None, export_dir: str | None = None) -> Project:
     p = Project(id=uuid.uuid4().hex[:12], url=url, video_id=video_id, settings=settings, upload_id=upload_id,
-                title=title, reuse_from=reuse_from)
+                title=title, reuse_from=reuse_from, export_dir=export_dir,
+                export_status="pending" if export_dir else None)
     p.dir.mkdir(parents=True, exist_ok=True)
     p.save()
     return p
 
 
-def reclip(base: Project, settings: dict) -> Project:
+def reclip(base: Project, settings: dict, export_dir: str | None = None) -> Project:
     """A new project on the same video as `base`, reusing its transcript."""
-    return create(base.url, base.video_id, settings, base.upload_id, base.title, reuse_from=base.id)
+    return create(base.url, base.video_id, settings, base.upload_id, base.title, reuse_from=base.id,
+                  export_dir=export_dir)
 
 
 def used_ranges(source_key: str, skip: str | None = None) -> list[tuple[float, float]]:
@@ -501,6 +518,7 @@ def _run(p: Project) -> None:
             p.progress = 0.45 + 0.55 * (i + 1) / len(p.clips)
             p.save()
         p.status, p.stage, p.progress = "done", "done", 1.0
+        _export_results(p)
         p.save()
         return
     # Never hand back a moment this video has already been clipped at.
@@ -531,6 +549,7 @@ def _run(p: Project) -> None:
     if not any(c["status"] == "done" for c in p.clips):
         raise RuntimeError(p.clips[0].get("error") or "no clip could be made")
     p.status, p.stage, p.progress = "done", "done", 1.0
+    _export_results(p)
     p.save()
 
 
@@ -657,6 +676,30 @@ def _write_posts(p: Project) -> None:
         traceback.print_exc()
 
 
+def _export_results(p: Project) -> None:
+    """Copy finished deliverables to the folder selected when the project was started."""
+    output = p.export_output_dir
+    if output is None:
+        return
+    p.export_status, p.export_error = "copying", None
+    p.save()
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+        names = {"dashboard-text.json", "filming-sequence.mp4", "filming-sequence.json"}
+        for clip in p.clips:
+            if clip.get("status") == "done":
+                names.update(name for name in (clip.get("video"), clip.get("thumb"), clip.get("srt")) if name)
+        for name in names:
+            source = p.dir / name
+            if source.is_file():
+                shutil.copy2(source, output / source.name)
+        p.export_status = "done"
+        p.save()
+        shutil.copy2(p.dir / "project.json", output / "project.json")
+    except OSError as exc:
+        p.export_status, p.export_error = "error", str(exc)
+
+
 def sequence_parts(p: Project) -> list[tuple[Path, float]]:
     """Return finished clips in display order, excluding thumbnail intros."""
     if p.status not in TERMINAL:
@@ -732,6 +775,7 @@ def _retry(p: Project, n: int) -> None:
             p.progress = 0.45 + 0.55 * sum(c.get("status") == "done" for c in p.clips) / len(p.clips)
             p.save()
         p.status, p.stage, p.progress = "done", "done", 1.0
+        _export_results(p)
         p.save()
         return
     clip = next(c for c in p.clips if c["n"] == n)
@@ -739,6 +783,7 @@ def _retry(p: Project, n: int) -> None:
     _attempt_clip(p, clip, _load_words(p), _clip_options(p), lo, hi - lo)
     if any(c.get("status") == "done" for c in p.clips):
         p.status, p.stage, p.progress, p.error = "done", "done", 1.0, None
+        _export_results(p)
     else:
         p.status, p.stage, p.error = "error", "failed", clip.get("error") or "Klip gagal diproses"
     p.save()

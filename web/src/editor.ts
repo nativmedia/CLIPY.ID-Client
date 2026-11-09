@@ -42,6 +42,10 @@ export type Project = {
     brand?: { position: string; text?: string; style?: string; opacity?: number };
   };
   has_logo?: boolean;
+  has_export_dir?: boolean;
+  export_ready?: boolean;
+  export_status?: "pending" | "copying" | "done" | "error" | null;
+  export_error?: string | null;
   music?: string | null;
   clips: Clip[];
 };
@@ -81,7 +85,6 @@ export async function retryClip(projectId: string, n: number) {
 const modal = $<HTMLDivElement>("#preview-modal");
 const modalVideo = $<HTMLVideoElement>("#modal-video");
 const modalTitle = $<HTMLParagraphElement>("#modal-title");
-const modalDownload = $<HTMLAnchorElement>("#modal-download");
 const modalEdit = $<HTMLButtonElement>("#modal-edit");
 let modalProject = "";
 
@@ -92,7 +95,6 @@ export function openPreview(project: Project, clip: Clip) {
   modalVideo.poster = clip.thumb ?? "";
   modalVideo.style.aspectRatio = project.settings.clip.ratio.replace(":", " / ");
   modalTitle.textContent = clip.title;
-  modalDownload.href = clip.video;
   modal.hidden = false;
   document.body.classList.add("locked");
   modalVideo.play().catch(() => {});
@@ -238,9 +240,6 @@ function clipCard(p: Project, c: Clip): HTMLLIElement {
   }
 
   const actions = el("div", { className: "clip-actions" });
-  if (c.video) actions.append(el("a", { className: "text-button", href: c.video, download: "", textContent: "download mp4" }));
-  if (c.thumb) actions.append(el("a", { className: "text-button", href: c.thumb, download: "", textContent: "download thumbnail" }));
-  if (c.srt) actions.append(el("a", { className: "text-button", href: c.srt, download: "", textContent: "srt" }));
   if (c.status === "error") {
     const retry = el("button", { type: "button", className: "text-button warn", textContent: "retry" });
     const running = !["done", "error", "cancelled"].includes(p.status);
@@ -277,6 +276,43 @@ function clipCard(p: Project, c: Clip): HTMLLIElement {
       c.video ? textPlaceholder(String(c.n)) : null,
     ),
   );
+}
+
+function resultStatus(p: Project): HTMLElement {
+  const complete = p.status === "done" && p.export_status !== "copying";
+  const state = el("button", {
+    type: "button",
+    disabled: true,
+    className: `result-state ${complete ? "is-complete" : "is-processing"}`,
+    title: complete ? "Proses selesai" : "Sedang memproses",
+    ariaLabel: complete ? "Proses selesai" : "Sedang memproses",
+  });
+  state.innerHTML = complete
+    ? '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 3.5 3.5L16 5"/></svg>'
+    : '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/></svg>';
+  return state;
+}
+
+function titleActions(p: Project): HTMLElement[] {
+  const actions: HTMLElement[] = [resultStatus(p)];
+  if (p.has_export_dir) {
+    const open = el("button", { type: "button", className: "text-button result-open", textContent: "Buka" });
+    open.disabled = !p.export_ready;
+    open.title = p.export_ready ? "Buka folder hasil" : "Folder hasil disiapkan setelah proses selesai";
+    open.addEventListener("click", async () => {
+      open.disabled = true;
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(p.id)}/output/open`, { method: "POST" });
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.detail ?? `status ${res.status}`);
+      } catch (err) {
+        open.title = (err as Error).message;
+      } finally {
+        open.disabled = !p.export_ready;
+      }
+    });
+    actions.push(open);
+  }
+  return actions;
 }
 
 async function loadDashboardTexts(id: string, scope: HTMLElement, routeId: string) {
@@ -318,8 +354,17 @@ const rowObservers = new Set<ResizeObserver>();
 function scrollButtons(grid: HTMLOListElement, row: HTMLElement) {
   grid.tabIndex = 0;
   grid.setAttribute("aria-label", "Daftar video proyek, dapat digeser ke samping");
-  const left = el("button", { type: "button", className: "editor-scroll-button", textContent: "←", title: "Geser video ke kiri" });
-  const right = el("button", { type: "button", className: "editor-scroll-button", textContent: "→", title: "Geser video ke kanan" });
+  const icon = (direction: "left" | "right") => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", direction === "left" ? "M14.5 4 6.5 12l8 8" : "m9.5 4 8 8-8 8");
+    svg.append(path);
+    return svg;
+  };
+  const left = el("button", { type: "button", className: "editor-scroll-button", title: "Geser video ke kiri" }, icon("left"));
+  const right = el("button", { type: "button", className: "editor-scroll-button", title: "Geser video ke kanan" }, icon("right"));
   left.setAttribute("aria-label", "Geser video ke kiri");
   right.setAttribute("aria-label", "Geser video ke kanan");
   const update = () => {
@@ -520,6 +565,7 @@ async function renderEditor(id: string) {
   const p: Project = await res.json();
   $<HTMLImageElement>("#editor-thumb").src = p.thumbnail;
   $<HTMLElement>("#editor-title").textContent = p.title || p.url;
+  $<HTMLElement>("#editor-title-actions").replaceChildren(...titleActions(p));
   const s = p.settings;
   $<HTMLElement>("#editor-meta").replaceChildren(
     `${clipLayout(s)} · ${p.clips.filter((c) => c.status === "done").length}/${p.clips.length} clips · `,
@@ -549,7 +595,7 @@ async function renderEditor(id: string) {
       const section = el("section", { className: "editor-other-project" },
         el("div", { className: "editor-intro" },
           el("img", { className: "editor-thumb", src: other.thumbnail, alt: "" }),
-          el("div", {}, el("h2", { textContent: other.title || other.url }),
+          el("div", {}, el("div", { className: "editor-title-row" }, el("h2", { textContent: other.title || other.url }), ...titleActions(other)),
              el("p", { className: "editor-meta", textContent: `${clipLayout(other.settings)} · ${other.clips.filter((c) => c.status === "done").length}/${other.clips.length} clips` }))),
         scrollButtons(grid, row), row);
       otherProjects.append(section);

@@ -69,6 +69,8 @@
         </form>
         <div class="under">
           <p class="hint" id="hint">paste link here</p>
+          <button type="button" class="text-button" id="export-pick">Save As</button>
+          <span class="export-location" id="export-location">folder hasil belum dipilih</span>
           <input id="upload-input" type="file" accept="video/*,.mkv,.mov" hidden />
           <button type="button" class="text-button" id="upload-pick">pilih video</button>
           <button type="button" class="text-button" id="library-open">open project</button>
@@ -256,7 +258,6 @@
         <video id="modal-video" playsinline controls></video>
         <p class="modal-title" id="modal-title"></p>
         <div class="modal-actions">
-          <a class="text-button" id="modal-download" download>download</a>
           <button type="button" class="text-button" id="modal-edit">open in editor</button>
         </div>
       </div>
@@ -281,7 +282,7 @@
       <div class="editor-intro">
         <img class="editor-thumb" id="editor-thumb" alt="" />
         <div>
-          <h2 id="editor-title"></h2>
+          <div class="editor-title-row"><h2 id="editor-title"></h2><div class="editor-title-actions" id="editor-title-actions"></div></div>
           <p class="editor-meta" id="editor-meta"></p>
         </div>
       </div>

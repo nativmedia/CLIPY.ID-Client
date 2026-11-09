@@ -155,6 +155,20 @@ def youtube_id(raw: str) -> str | None:
     return vid if vid and re.fullmatch(r"[\w-]{11}", vid) else None
 
 
+def require_local_browser(request: Request) -> None:
+    """Native Windows dialogs and output folders are only safe from the local UI."""
+    origin = request.headers.get("origin", "")
+    if request.client is None or request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(403, "Hanya tersedia di komputer server")
+    desktop_origin = os.environ.get("CLIPY_DESKTOP_ORIGIN", "")
+    allowed_origins = {"http://127.0.0.1:4747", "http://localhost:4747", "http://127.0.0.1:4757", "http://localhost:4757"}
+    if origin not in allowed_origins and not (desktop_origin and origin == desktop_origin):
+        raise HTTPException(403, "Hanya tersedia dari halaman lokal")
+    allowed_hosts = {"127.0.0.1:4747", "localhost:4747", "127.0.0.1:4748", "localhost:4748", "127.0.0.1:4757", "localhost:4757", "127.0.0.1:4758", "localhost:4758", desktop_origin.removeprefix("http://")}
+    if request.headers.get("host", "") not in allowed_hosts:
+        raise HTTPException(403, "Host tidak diizinkan")
+
+
 # ---------- key ----------
 
 class KeyRequest(BaseModel):
@@ -204,15 +218,7 @@ def options():
 @app.post("/api/local-files/pick")
 def pick_local_video(request: Request):
     """Open the server desktop picker only from the local CLIPY web page."""
-    origin = request.headers.get("origin", "")
-    if request.client is None or request.client.host not in ("127.0.0.1", "::1"):
-        raise HTTPException(403, "Hanya tersedia di komputer server")
-    desktop_origin = os.environ.get("CLIPY_DESKTOP_ORIGIN", "")
-    if origin not in ("http://127.0.0.1:4747", "http://localhost:4747", "http://127.0.0.1:4757", "http://localhost:4757") and not (desktop_origin and origin == desktop_origin):
-        raise HTTPException(403, "Pemilih file hanya tersedia dari halaman lokal")
-    allowed_hosts = ("127.0.0.1:4747", "localhost:4747", "127.0.0.1:4748", "localhost:4748", "127.0.0.1:4757", "localhost:4757", "127.0.0.1:4758", "localhost:4758", desktop_origin.removeprefix("http://"))
-    if request.headers.get("host", "") not in allowed_hosts:
-        raise HTTPException(403, "Host tidak diizinkan")
+    require_local_browser(request)
     import tkinter as tk
     from tkinter import filedialog
     root = tk.Tk()
@@ -228,6 +234,27 @@ def pick_local_video(request: Request):
         return uploads.register_local(Path(selected))
     except (ValueError, OSError) as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/api/export-directory/choose")
+def choose_export_directory(request: Request):
+    """Open Windows' folder picker and return a directory chosen by the local user."""
+    require_local_browser(request)
+    import tkinter as tk
+    from tkinter import filedialog
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        selected = filedialog.askdirectory(title="Simpan hasil CLIPY ke folder", mustexist=True, parent=root)
+    finally:
+        root.destroy()
+    if not selected:
+        return Response(status_code=204)
+    path = Path(selected).resolve()
+    if not path.is_dir():
+        raise HTTPException(400, "Folder tujuan tidak dapat digunakan")
+    return {"path": str(path)}
 
 @app.post("/api/uploads")
 async def upload_video(file: UploadFile = File(...)):
@@ -294,6 +321,7 @@ async def preview_music(url: str = Form(...)):
 
 @app.post("/api/projects")
 async def create_project(
+    request: Request,
     settings: str = Form(...),
     url: str = Form(""),
     upload_id: str = Form(""),
@@ -304,6 +332,7 @@ async def create_project(
     subtitle: UploadFile | None = File(None),
     music: UploadFile | None = File(None),
     music_url: str = Form(""),
+    export_dir: str = Form(""),
 ):
     vid = ""
     base = None
@@ -337,6 +366,16 @@ async def create_project(
     if t.source == "upload" and not image:
         raise HTTPException(400, "choose an image to upload")
 
+    export_path = None
+    if export_dir.strip():
+        require_local_browser(request)
+        try:
+            export_path = Path(export_dir).expanduser().resolve(strict=True)
+        except OSError as exc:
+            raise HTTPException(400, "Folder Save As tidak tersedia") from exc
+        if not export_path.is_dir():
+            raise HTTPException(400, "Folder Save As tidak valid")
+
     for f in (image, logo):
         if f and (f.filename or "").rsplit(".", 1)[-1].lower() not in IMAGE_TYPES:
             raise HTTPException(400, "images must be JPG, PNG or WebP")
@@ -367,11 +406,13 @@ async def create_project(
             raise HTTPException(400, str(e)) from e
 
     if base:
-        p = projects.reclip(base, s.model_dump())
+        p = projects.reclip(base, s.model_dump(), export_dir=str(export_path) if export_path else None)
     elif upload_id:
-        p = projects.create("", "", s.model_dump(), upload_id=upload_id, title=title.strip()[:200] or "uploaded video")
+        p = projects.create("", "", s.model_dump(), upload_id=upload_id, title=title.strip()[:200] or "uploaded video",
+                            export_dir=str(export_path) if export_path else None)
     else:
-        p = projects.create(f"https://www.youtube.com/watch?v={vid}", vid, s.model_dump())
+        p = projects.create(f"https://www.youtube.com/watch?v={vid}", vid, s.model_dump(),
+                            export_dir=str(export_path) if export_path else None)
     if t.source == "upload" and image:
         p.upload = await save_image(p, image, "upload")
     if logo:
@@ -536,6 +577,25 @@ def get_project(project_id: str):
     if not p:
         raise HTTPException(404, "no such project")
     return p.public()
+
+
+@app.post("/api/projects/{project_id}/output/open")
+def open_project_output(project_id: str, request: Request):
+    """Reveal copied deliverables in Windows Explorer."""
+    require_local_browser(request)
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    output = p.export_output_dir
+    if output is None or not output.is_dir():
+        raise HTTPException(409, "Hasil belum tersedia di folder Save As")
+    if os.name != "nt":
+        raise HTTPException(501, "Buka folder hanya tersedia di Windows")
+    try:
+        os.startfile(str(output))
+    except OSError as exc:
+        raise HTTPException(500, f"Tidak dapat membuka folder: {exc}") from exc
+    return {"ok": True}
 
 
 @app.get("/api/projects/{project_id}/files/{name}")
