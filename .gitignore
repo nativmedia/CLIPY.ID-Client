@@ -1,5 +1,6 @@
 web/node_modules/
 web/dist/
+.venv/
 server/.venv/
 server/data/
 server/models/

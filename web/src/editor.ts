@@ -318,8 +318,8 @@ const rowObservers = new Set<ResizeObserver>();
 function scrollButtons(grid: HTMLOListElement, row: HTMLElement) {
   grid.tabIndex = 0;
   grid.setAttribute("aria-label", "Daftar video proyek, dapat digeser ke samping");
-  const left = el("button", { type: "button", textContent: "←", title: "Geser video ke kiri" });
-  const right = el("button", { type: "button", textContent: "→", title: "Geser video ke kanan" });
+  const left = el("button", { type: "button", className: "editor-scroll-button", textContent: "←", title: "Geser video ke kiri" });
+  const right = el("button", { type: "button", className: "editor-scroll-button", textContent: "→", title: "Geser video ke kanan" });
   left.setAttribute("aria-label", "Geser video ke kiri");
   right.setAttribute("aria-label", "Geser video ke kanan");
   const update = () => {
@@ -336,8 +336,13 @@ function scrollButtons(grid: HTMLOListElement, row: HTMLElement) {
     observer.observe(grid);
   }
   window.setTimeout(update, 0);
-  left.addEventListener("click", () => grid.scrollBy({ left: -grid.clientWidth * 0.8 }));
-  right.addEventListener("click", () => grid.scrollBy({ left: grid.clientWidth * 0.8 }));
+  const clipStep = () => {
+    const card = grid.querySelector<HTMLElement>(".editor-clip");
+    const gap = Number.parseFloat(getComputedStyle(grid).columnGap) || 0;
+    return (card?.getBoundingClientRect().width || grid.clientWidth) + gap;
+  };
+  left.addEventListener("click", () => grid.scrollBy({ left: -clipStep(), behavior: "smooth" }));
+  right.addEventListener("click", () => grid.scrollBy({ left: clipStep(), behavior: "smooth" }));
   return el("div", { className: "editor-scroll-controls" }, left, right);
 }
 

@@ -1008,15 +1008,27 @@ body.locked { overflow: hidden; }
 .editor-meta a { color: var(--fg-2); text-underline-offset: 3px; }
 .editor-meta a:hover { color: var(--accent); }
 .editor-other-project { margin-top: 56px; }
-.editor-scroll-controls { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
-.editor-scroll-controls button { min-width: 40px; min-height: 36px; border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); font: 600 16px var(--mono); cursor: pointer; }
-.editor-scroll-controls button:hover { border-color: var(--accent); color: var(--accent); }
-.editor-scroll-controls button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.editor-scroll-controls { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.editor-scroll-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--accent);
+  color: #071316;
+  font: 900 24px / 1 var(--mono);
+  cursor: pointer;
+  transition: background-color .15s ease, opacity .15s ease, transform .15s ease;
+}
+.editor-scroll-button:hover:not(:disabled) { background: #5de0e4; transform: translateY(-1px); }
+.editor-scroll-button:active:not(:disabled) { transform: translateY(0); }
+.editor-scroll-button:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+.editor-scroll-button:disabled { opacity: .32; cursor: not-allowed; }
 .editor-row { position: relative; min-width: 0; }
-.editor-row::before, .editor-row::after { content: ""; position: absolute; z-index: 1; top: 12px; bottom: 16px; width: clamp(12px, 2vw, 32px); pointer-events: none; opacity: 0; transition: opacity .15s ease; }
-.editor-row::before { left: 0; background: linear-gradient(to right, var(--bg), transparent); }
-.editor-row::after { right: 0; background: linear-gradient(to left, var(--bg), transparent); }
-.editor-row.can-scroll-left::before, .editor-row.can-scroll-right::after { opacity: 1; }
 
 .editor-clips {
   list-style: none;
@@ -1030,7 +1042,10 @@ body.locked { overflow: hidden; }
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
   scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
+.editor-clips::-webkit-scrollbar { display: none; }
 .editor-clip {
   min-width: 0;
   scroll-snap-align: start;
