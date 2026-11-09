@@ -67,17 +67,16 @@ function ClipResult({ project, clip, onPreview, onRetry, onRefresh }: ResultsPro
   return <li className={clip.status === "error" ? "has-error" : ""}>
     <span className="n">{String(clip.n).padStart(2, "0")}</span>
     {clip.video ? <button type="button" className="t link-title" title={`preview · ${clip.title}`} onClick={() => onPreview(project, clip)} {...titleProps}>{text}</button> : <span className="t" title={clip.title} {...titleProps}>{text}</span>}
-    {clip.status === "error" && running ? <span className="state">tunggu selesai</span>
-      : clip.status === "error" && project.status !== "cancelled" ? <button type="button" className="text-button warn" title={clip.error ?? ""} disabled={retrying} onClick={retry}>{retrying ? "retrying…" : "retry"}</button>
-      : clip.video ? <a className="text-button" href={clip.video} download="">download</a>
-      : <span className="state">{project.status === "cancelled" ? "dihentikan" : clip.status}</span>}
+    {clip.status === "error" && !running && project.status !== "cancelled" && <button type="button" className="text-button warn" title={clip.error ?? ""} disabled={retrying} onClick={retry}>{retrying ? "retrying…" : "retry"}</button>}
     {clip.status === "error" && <span className="clip-error" role="status">{retryError || errorText || "Klip gagal diproses"}</span>}
   </li>;
 }
 
-/** Shared result list for completed and in-progress projects. */
+/** Only completed deliverables (and actionable errors) belong in the result list. */
 export function ClipResults(props: ResultsProps) {
-  return <>{props.project.clips.map((clip) => <ClipResult key={clip.n} {...props} clip={clip} />)}</>;
+  return <>{props.project.clips
+    .filter((clip) => !!clip.video || clip.status === "error")
+    .map((clip) => <ClipResult key={clip.n} {...props} clip={clip} />)}</>;
 }
 
 // Islands mount into existing elements, preserving CSS selectors and semantics.

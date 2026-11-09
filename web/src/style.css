@@ -774,6 +774,9 @@ body.locked { overflow: hidden; }
 }
 .project-control { position: absolute; right: 0; top: 0; z-index: 1; }
 .project h3 { padding-right: 60px; }
+.project-title-row { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.project-title-row .project-title { flex: 1; min-width: 0; }
+.project-open-output { flex: none; color: var(--accent); }
 .project:last-child { border-bottom: 0; }
 .project-open { padding: 0; border: 0; background: none; cursor: pointer; align-self: start; }
 .project-thumb {
