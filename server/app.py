@@ -39,7 +39,7 @@ from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from clipy import captions, film_sequence, keys, media, projects, social, thumbs, tts, uploads
+from clipy import captions, dashboard_text, film_sequence, keys, media, projects, social, thumbs, tts, uploads
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -470,6 +470,39 @@ def get_posts(project_id: str):
         raise HTTPException(502, f"couldn't write the posts: {e}")
 
 
+@app.get("/api/projects/{project_id}/dashboard-text")
+def get_dashboard_text(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    try:
+        include_sequence = p.settings.get("mode") == "filming" and film_sequence.status(p)["status"] == "done"
+        return dashboard_text.ensure(p, include_sequence=include_sequence)
+    except keys.KeyProblem as e:
+        raise HTTPException(400, str(e)) from e
+    except Exception as e:
+        raise HTTPException(502, f"Deskripsi belum dapat dibuat: {e}") from e
+
+
+class DashboardTextUpdate(BaseModel):
+    item: str = Field(pattern=r"^(sequence|[1-9][0-9]*)$")
+    field: str = Field(pattern=r"^(title|pendek|sedang|panjang)$")
+    text: str = Field(max_length=600)
+
+
+@app.put("/api/projects/{project_id}/dashboard-text")
+def put_dashboard_text(project_id: str, req: DashboardTextUpdate):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    if req.item == "sequence" and p.settings.get("mode") != "filming":
+        raise HTTPException(409, "Video gabungan hanya tersedia untuk Filming")
+    try:
+        return dashboard_text.update(p, req.item, req.field, req.text)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 class PostsUpdate(BaseModel):
     posts: dict[str, dict[str, dict[str, str]]]
 
@@ -565,6 +598,19 @@ def download_film_sequence(project_id: str):
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     return FileResponse(output, media_type="video/mp4", filename=f"clipy-{p.id}-gabungan.mp4")
+
+
+@app.get("/api/projects/{project_id}/film-sequence/video")
+def preview_film_sequence(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    try:
+        output = film_sequence.download(p)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return FileResponse(output, media_type="video/mp4", filename=f"clipy-{p.id}-gabungan.mp4",
+                        content_disposition_type="inline")
 
 
 @app.get("/api/projects/{project_id}/assets/{kind}")

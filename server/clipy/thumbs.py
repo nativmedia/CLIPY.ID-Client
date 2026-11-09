@@ -6,9 +6,6 @@ clip title set on it in one of a few styles.
 from __future__ import annotations
 
 from pathlib import Path
-import logging
-
-LOG = logging.getLogger(__name__)
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
@@ -237,32 +234,16 @@ def _draw_title(img: Image.Image, title: str, style: str, center_y: float, size:
 
 
 def thumbnail_text(config: dict, clip: dict, context: str = "") -> str:
-    """Choose a title per clip, using grounded source context for auto mode."""
+    """Use the clip title for auto mode, preserving manual and hidden options."""
     if config.get("text_mode") == "none":
         return ""
     if config.get("text_mode") != "auto":
         return (config.get("text") or "").strip()
     if config.get("title_style") == "none":
         return ""
-    if clip.get("thumbnail_text"):
-        return clip["thumbnail_text"]
-    try:
-        from . import keys
-        result = keys.ask_json(
-            "Kamu editor judul thumbnail video berbahasa Indonesia. Buat judul pendek, jelas, menarik, dan memancing rasa penasaran berdasarkan konteks. Gunakan hanya fakta yang didukung konteks; jangan mengarang atau menjanjikan hal yang tidak ada. Jangan gunakan hashtag, tanda kutip, atau nomor urut. Kembalikan JSON.",
-            f"Judul klip: {clip.get('title', '')}\nKonteks: {(context or clip.get('reason') or '')[:2000]}\nBuat satu judul thumbnail maksimal 7 kata dan 55 karakter.",
-            {"type": "object", "properties": {"title": {"type": "string"}}, "required": ["title"]},
-        )
-        title = " ".join(str(result.get("title", "")).strip().strip('\"\'').split())
-        if not title:
-            raise ValueError("empty thumbnail title")
-        title = title[:55].rsplit(" ", 1)[0] if len(title) > 55 else title
-        title = " ".join(title.split()[:7])
-        clip["thumbnail_text"] = title
-        return title
-    except Exception:
-        LOG.warning("Unable to generate thumbnail text; using clip title", exc_info=True)
-        return ""
+    # Automatic thumbnails use the exact clip title. Manual text and the
+    # option to hide text remain controlled by the user's existing settings.
+    return (clip.get("title") or "").strip()
 
 
 def add_title(image: Path, out: Path, title: str, style: str, *, custom_text: str = "", number: int | None = None, sequence: str = "number", position: str | None = None) -> Path:

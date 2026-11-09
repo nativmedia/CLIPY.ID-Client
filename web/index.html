@@ -276,7 +276,7 @@
     <section class="editor" id="editor" hidden aria-labelledby="editor-title">
       <header class="editor-head">
         <button type="button" class="text-button" id="editor-back">← back</button>
-        <p class="kicker"><span>project result</span></p>
+        <p class="kicker"><span>project dashboard</span></p>
       </header>
       <div class="editor-intro">
         <img class="editor-thumb" id="editor-thumb" alt="" />
@@ -286,7 +286,9 @@
         </div>
       </div>
       <p class="hint" id="editor-hint"></p>
-      <ol class="editor-clips" id="editor-clips"></ol>
+      <div id="editor-scroll-controls"></div>
+      <div class="editor-row" id="editor-primary-row"><ol class="editor-clips" id="editor-clips"></ol></div>
+      <div id="editor-other-projects"></div>
     </section>
 
     <script type="module" src="/src/main.ts"></script>

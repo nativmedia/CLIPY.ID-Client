@@ -1,6 +1,6 @@
 /**
  * Result views: the clip preview pop-up and the project editor page, where each finished
- * clip sits next to ready-made titles and descriptions per platform (editable, saved back).
+ * clip sits next to editable short, medium and long descriptions.
  */
 
 export type Clip = {
@@ -54,10 +54,9 @@ export function clipLayout(settings: Project["settings"]): string {
   return `${settings.clip.ratio} ${settings.clip.fit === "crop" ? "crop" : "no crop"}`;
 }
 
-type Platforms = Record<string, { fields: Record<string, number> }>;
-const platformLabels = { youtube: "YouTube", tiktok: "TikTok", instagram: "Instagram", facebook: "Facebook", x: "X" };
-type Platform = keyof typeof platformLabels;
-type Posts = Record<string, Record<string, Record<string, string>>>;
+type LengthName = "pendek" | "sedang" | "panjang";
+type DashboardText = { title?: string; pendek: string; sedang: string; panjang: string };
+type DashboardTexts = Record<string, DashboardText>;
 
 /** Small DOM builder; text always goes in as text, never as HTML. */
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...children: (Node | string | null | false | undefined)[]) {
@@ -75,12 +74,6 @@ export const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s
 export async function retryClip(projectId: string, n: number) {
   const res = await fetch(`/api/projects/${projectId}/clips/${n}/retry`, { method: "POST" });
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.detail ?? `status ${res.status}`);
-}
-
-let platforms: Platforms | null = null;
-async function getPlatforms(): Promise<Platforms> {
-  if (!platforms) platforms = (await (await fetch("/api/options", { cache: "no-store" })).json()).platforms as Platforms;
-  return platforms;
 }
 
 // ---------- preview pop-up ----------
@@ -129,9 +122,12 @@ modalEdit.addEventListener("click", () => {
 
 const editor = $<HTMLElement>("#editor");
 const editorClips = $<HTMLOListElement>("#editor-clips");
+const otherProjects = $<HTMLDivElement>("#editor-other-projects");
+const scrollControls = $<HTMLDivElement>("#editor-scroll-controls");
 const editorHint = $<HTMLParagraphElement>("#editor-hint");
 let editing = "";
-const pendingSaves = new Map<string, { timer: number; posts: Posts }>();
+const pendingSaves = new Map<string, number>();
+const saveQueues = new Map<string, Promise<void>>();
 
 export function openEditor(id: string) {
   location.hash = `#/project/${id}`;
@@ -150,27 +146,28 @@ document.addEventListener("keydown", (e) => {
   else if (!editor.hidden) closeEditor();
 });
 
-function queueSave(n: string, platform: string, field: string, text: string, status: HTMLElement) {
-  const projectId = editing;
-  const save = pendingSaves.get(projectId) ?? { timer: 0, posts: {} };
-  ((save.posts[n] ??= {})[platform] ??= {})[field] = text;
-  pendingSaves.set(projectId, save);
+function queueSave(projectId: string, n: string, field: string, text: string, status: HTMLElement) {
+  const key = `${projectId}:${n}:${field}`;
   status.textContent = "saving…";
-  clearTimeout(save.timer);
-  save.timer = window.setTimeout(async () => {
-    pendingSaves.delete(projectId);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/posts`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ posts: save.posts }),
-      });
-      if (!res.ok) throw new Error(String(res.status));
-      status.textContent = "saved";
-    } catch {
-      status.textContent = "couldn't save";
-    }
-  }, 700);
+  clearTimeout(pendingSaves.get(key));
+  pendingSaves.set(key, window.setTimeout(() => {
+    pendingSaves.delete(key);
+    const next = (saveQueues.get(key) ?? Promise.resolve()).then(async () => {
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/dashboard-text`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ item: n, field, text }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        if (saveQueues.get(key) === next && !pendingSaves.has(key)) status.textContent = "saved";
+      } catch {
+        if (saveQueues.get(key) === next && !pendingSaves.has(key)) status.textContent = "couldn't save";
+      }
+    });
+    saveQueues.set(key, next);
+    void next.then(() => { if (saveQueues.get(key) === next) saveQueues.delete(key); });
+  }, 700));
 }
 
 async function copy(text: string, button: HTMLButtonElement) {
@@ -183,53 +180,60 @@ async function copy(text: string, button: HTMLButtonElement) {
   setTimeout(() => (button.textContent = "copy"), 1400);
 }
 
-/** Platform tabs plus their fields for one clip; `posts` may still be loading. */
-function postsPanel(n: string, spec: Platforms, posts: Posts | null): HTMLElement {
+/** Three independently editable description lengths, shared by clips and sequence. */
+function postsPanel(projectId: string, n: string, values: DashboardText): HTMLElement {
   const box = el("div", { className: "posts" });
   const tabs = el("div", { className: "tabs" });
   tabs.setAttribute("role", "tablist");
+  tabs.setAttribute("aria-label", "Panjang deskripsi");
   const body = el("div", { className: "post-fields" });
   const status = el("span", { className: "save-status" });
-
-  if (!posts) {
-    box.append(el("p", { className: "hint", textContent: "writing descriptions…" }));
-    return box;
-  }
-  const show = (platform: Platform) => {
-    tabs.querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.platform === platform)));
-    const limit = spec[platform].fields.description;
-    const values = ((posts[n] ??= {})[platform] ??= {});
+  status.setAttribute("role", "status");
+  const show = (length: LengthName) => {
+    tabs.querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.length === length)));
     const area = el("textarea", {
-      value: values.description ?? "", maxLength: limit, spellcheck: true, rows: platform === "x" ? 3 : 5,
+      value: values[length] ?? "", maxLength: { pendek: 70, sedang: 250, panjang: 600 }[length], spellcheck: true, rows: length === "pendek" ? 3 : 5,
     });
-    area.setAttribute("aria-label", `Deskripsi ${platformLabels[platform]}`);
-    const count = el("span", { className: "count", textContent: `${area.value.length}/${limit}` });
+    area.setAttribute("aria-label", `Deskripsi ${length}`);
     const copyButton = el("button", { type: "button", className: "text-button", textContent: "copy" });
     copyButton.addEventListener("click", () => copy(area.value, copyButton));
     area.addEventListener("input", () => {
-      count.textContent = `${area.value.length}/${limit}`;
-      values.description = area.value;
-      queueSave(n, platform, "description", area.value, status);
+      values[length] = area.value;
+      queueSave(projectId, n, length, area.value, status);
     });
     body.replaceChildren(el("div", { className: "post-field" },
-      el("div", { className: "field-head" }, el("span", { textContent: "description" }), count, copyButton),
+      el("div", { className: "field-head" }, copyButton),
       area,
     ));
   };
-
-  for (const platform of Object.keys(platformLabels) as Platform[]) {
-    const b = el("button", { type: "button", textContent: platformLabels[platform] });
-    b.dataset.platform = platform;
+  if (n === "sequence") {
+    const input = el("input", { value: values.title ?? "", maxLength: 120 });
+    input.setAttribute("aria-label", "Judul video gabungan");
+    const titleCopy = el("button", { type: "button", className: "text-button", textContent: "copy" });
+    titleCopy.addEventListener("click", () => copy(input.value, titleCopy));
+    input.addEventListener("input", () => { values.title = input.value; queueSave(projectId, n, "title", input.value, status); });
+    box.append(el("div", { className: "post-field" }, el("div", { className: "field-head" }, el("span", { textContent: "judul" }), titleCopy), input));
+  }
+  for (const length of ["pendek", "sedang", "panjang"] as const) {
+    const b = el("button", { type: "button", textContent: length });
+    b.dataset.length = length;
     b.setAttribute("role", "tab");
-    b.addEventListener("click", () => show(platform));
+    b.addEventListener("click", () => show(length));
     tabs.append(b);
   }
   box.append(tabs, body, status);
-  show("youtube");
+  show("sedang");
   return box;
 }
 
-function clipCard(p: Project, c: Clip, spec: Platforms, posts: Posts | null): HTMLLIElement {
+function textPlaceholder(id: string): HTMLElement {
+  const slot = el("div");
+  slot.dataset.textId = id;
+  slot.append(el("p", { className: "hint", textContent: "Menyiapkan deskripsi…" }));
+  return slot;
+}
+
+function clipCard(p: Project, c: Clip): HTMLLIElement {
   const ratio = p.settings.clip.ratio.replace(":", " / ");
   let media: HTMLElement;
   if (c.video) {
@@ -279,25 +283,149 @@ function clipCard(p: Project, c: Clip, spec: Platforms, posts: Posts | null): HT
       c.error ? el("p", { className: "hint error", textContent: c.error }) : null,
       c.note ? el("p", { className: "hint", textContent: c.note }) : null,
       actions,
-      c.video ? postsPanel(String(c.n), spec, posts) : null,
+      c.video ? textPlaceholder(String(c.n)) : null,
     ),
   );
 }
 
+async function loadDashboardTexts(id: string, scope: HTMLElement, routeId: string) {
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(id)}/dashboard-text`);
+    const data: DashboardTexts & { detail?: string } = await response.json();
+    if (!response.ok) throw new Error(data.detail ?? `status ${response.status}`);
+    if (editing !== routeId || editor.hidden || !scope.isConnected) return;
+    scope.querySelectorAll<HTMLElement>("[data-text-id]").forEach((slot) => {
+      const textId = slot.dataset.textId!;
+      if (data[textId] && slot.dataset.loaded !== "true") {
+        slot.replaceChildren(postsPanel(id, textId, data[textId]));
+        slot.dataset.loaded = "true";
+      }
+    });
+  } catch (error) {
+    if (editing !== routeId || editor.hidden || !scope.isConnected) return;
+    scope.querySelectorAll<HTMLElement>("[data-text-id]:not([data-loaded])").forEach((slot) => {
+      const retry = el("button", { type: "button", className: "text-button", textContent: "coba lagi" });
+      retry.addEventListener("click", () => { retry.disabled = true; void loadDashboardTexts(id, scope, routeId); });
+      slot.replaceChildren(el("p", { className: "hint error", textContent: `Deskripsi belum tersedia: ${(error as Error).message}` }), retry);
+    });
+  }
+}
+
+type SequenceState = { status: "idle" | "running" | "done" | "error"; progress: number; message: string };
+const sequenceActivators = new WeakMap<Element, () => void>();
+const projectObservers = new Set<IntersectionObserver>();
+const rowObservers = new Set<ResizeObserver>();
+
+function scrollButtons(grid: HTMLOListElement, row: HTMLElement) {
+  grid.tabIndex = 0;
+  grid.setAttribute("aria-label", "Daftar video proyek, dapat digeser ke samping");
+  const left = el("button", { type: "button", textContent: "←", title: "Geser video ke kiri" });
+  const right = el("button", { type: "button", textContent: "→", title: "Geser video ke kanan" });
+  left.setAttribute("aria-label", "Geser video ke kiri");
+  right.setAttribute("aria-label", "Geser video ke kanan");
+  const update = () => {
+    const max = Math.max(0, grid.scrollWidth - grid.clientWidth);
+    row.classList.toggle("can-scroll-left", grid.scrollLeft > 1);
+    row.classList.toggle("can-scroll-right", grid.scrollLeft < max - 1);
+    left.disabled = grid.scrollLeft <= 1;
+    right.disabled = grid.scrollLeft >= max - 1;
+  };
+  grid.onscroll = update;
+  if ("ResizeObserver" in window) {
+    const observer = new ResizeObserver(update);
+    rowObservers.add(observer);
+    observer.observe(grid);
+  }
+  window.setTimeout(update, 0);
+  left.addEventListener("click", () => grid.scrollBy({ left: -grid.clientWidth * 0.8 }));
+  right.addEventListener("click", () => grid.scrollBy({ left: grid.clientWidth * 0.8 }));
+  return el("div", { className: "editor-scroll-controls" }, left, right);
+}
+
+/** Each project's combined video stays inside its own project grid. */
+function sequenceCard(p: Project, scope: HTMLElement, routeId: string): HTMLLIElement {
+  const endpoint = `/api/projects/${encodeURIComponent(p.id)}/film-sequence`;
+  const media = el("div", { className: "clip-media" });
+  const placeholder = el("div", { className: "video-empty", textContent: "Memeriksa video gabungan…" });
+  placeholder.style.aspectRatio = p.settings.clip.ratio.replace(":", " / ");
+  media.append(placeholder);
+  const body = el("div", { className: "clip-body" });
+  const actions = el("div", { className: "clip-actions" });
+  const note = el("p", { className: "hint" });
+  note.setAttribute("role", "status");
+  const button = el("button", { type: "button", className: "text-button", textContent: `Gabungkan Clip 1-${p.settings.film?.episodes ?? p.clips.length}` });
+  const complete = p.status === "done" && p.clips.length === p.settings.film?.episodes && p.clips.every((c) => c.status === "done" && !!c.video);
+  button.disabled = !complete;
+  actions.append(button);
+  body.append(el("p", { className: "kicker" }, el("span", { textContent: "video gabungan" })),
+              el("h3", { textContent: "Gabungan clip" }), actions, note);
+  const card = el("li", { className: "editor-clip" }, media, body);
+  let timer = 0;
+  const show = (state: SequenceState) => {
+    if (!card.isConnected || editing !== routeId) return;
+    clearTimeout(timer);
+    if (state.status === "done") {
+      const video = el("video", { src: `${endpoint}/video`, controls: true, preload: "metadata", playsInline: true });
+      video.style.aspectRatio = p.settings.clip.ratio.replace(":", " / ");
+      media.replaceChildren(video);
+      actions.replaceChildren(el("a", { className: "text-button", href: `${endpoint}/download`, download: "", textContent: "download mp4" }));
+      note.textContent = "";
+      if (!body.querySelector("[data-text-id]")) {
+        body.append(textPlaceholder("sequence"));
+        void loadDashboardTexts(p.id, scope, routeId);
+      }
+      return;
+    }
+    const running = state.status === "running";
+    button.disabled = !complete || running;
+    button.textContent = running ? "Menggabungkan…" : `Gabungkan Clip 1-${p.settings.film?.episodes ?? p.clips.length}`;
+    placeholder.textContent = running ? `Menggabungkan · ${Math.round(state.progress * 100)}%` : "Video gabungan belum tersedia";
+    note.textContent = state.status === "error" ? state.message : !complete ? "Selesaikan atau ulangi semua clip terlebih dahulu." : running ? state.message : "";
+    note.classList.toggle("error", state.status === "error");
+    if (running) timer = window.setTimeout(check, 1000);
+  };
+  const check = async () => {
+    if (!card.isConnected || editing !== routeId) return;
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      show(await response.json());
+    } catch {
+      if (card.isConnected) { note.textContent = "Status gabungan tidak dapat diperiksa. Coba buka dashboard kembali."; note.classList.add("error"); }
+    }
+  };
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const response = await fetch(endpoint, { method: "POST" });
+      const state = await response.json();
+      if (!response.ok) throw new Error(state.detail ?? `status ${response.status}`);
+      show(state);
+    } catch (error) {
+      button.disabled = !complete;
+      note.textContent = (error as Error).message;
+      note.classList.add("error");
+    }
+  });
+  sequenceActivators.set(card, () => { void check(); });
+  if (scope === editorClips) window.setTimeout(check, 0);
+  return card;
+}
+
 let follow = 0;
 /** After a retry, re-render the editor until the clip settles. */
-function followUntilDone(id: string) {
+function followUntilDone(id: string, routeId = editing) {
   clearTimeout(follow);
   follow = window.setTimeout(async () => {
-    if (editing !== id) return;
+    if (editing !== routeId) return;
     try {
       const response = await fetch(`/api/projects/${id}`);
       if (!response.ok) throw new Error(`status ${response.status}`);
       const p: Project = await response.json();
-      if (["done", "error", "cancelled"].includes(p.status)) void renderEditor(id);
-      else followUntilDone(id);
+      if (["done", "error", "cancelled"].includes(p.status)) void renderEditor(routeId);
+      else followUntilDone(id, routeId);
     } catch {
-      if (editing === id) followUntilDone(id);
+      if (editing === routeId) followUntilDone(id, routeId);
     }
   }, 2000);
 }
@@ -306,7 +434,8 @@ async function renderEditor(id: string) {
   editing = id;
   editorHint.textContent = "";
   editorHint.classList.remove("error");
-  const [res, spec] = await Promise.all([fetch(`/api/projects/${id}`), getPlatforms()]);
+  const res = await fetch(`/api/projects/${id}`);
+  if (editing !== id || editor.hidden) return;
   if (!res.ok) {
     editorClips.replaceChildren();
     editorHint.textContent = "project not found";
@@ -322,18 +451,51 @@ async function renderEditor(id: string) {
     p.url ? el("a", { href: p.url, target: "_blank", rel: "noopener", textContent: "source video" }) : "uploaded video",
   );
 
-  const draw = (posts: Posts | null) => editorClips.replaceChildren(...p.clips.map((c) => clipCard(p, c, spec, posts)));
-  draw(null);
-  if (!p.clips.some((c) => c.video)) return;
+  projectObservers.forEach((observer) => observer.disconnect());
+  projectObservers.clear();
+  rowObservers.forEach((observer) => observer.disconnect());
+  rowObservers.clear();
+  otherProjects.replaceChildren();
+  editorClips.scrollLeft = 0;
+  scrollControls.replaceChildren(scrollButtons(editorClips, $<HTMLElement>("#editor-primary-row")));
+  editorClips.replaceChildren(...p.clips.map((c) => clipCard(p, c)),
+    ...(p.settings.mode === "filming" && p.clips.length ? [sequenceCard(p, editorClips, id)] : []));
+  if (p.clips.some((c) => c.video)) void loadDashboardTexts(id, editorClips, id);
+  if (!["done", "error", "cancelled"].includes(p.status)) followUntilDone(id);
   try {
-    const posts = await fetch(`/api/projects/${id}/posts`);
-    const data = await posts.json();
-    if (editing !== id) return;
-    if (!posts.ok) throw new Error(data.detail ?? `status ${posts.status}`);
-    draw(data);
-  } catch (err) {
-    editorHint.textContent = `titles & descriptions: ${(err as Error).message}`;
-    editorHint.classList.add("error");
+    const listResponse = await fetch("/api/projects");
+    if (!listResponse.ok) return;
+    const others: Project[] = await listResponse.json();
+    if (editing !== id || editor.hidden) return;
+    for (const other of others) {
+      if (other.id === id || !other.clips.length) continue;
+      const grid = el("ol", { className: "editor-clips" });
+      const row = el("div", { className: "editor-row" }, grid);
+      const section = el("section", { className: "editor-other-project" },
+        el("div", { className: "editor-intro" },
+          el("img", { className: "editor-thumb", src: other.thumbnail, alt: "" }),
+          el("div", {}, el("h2", { textContent: other.title || other.url }),
+             el("p", { className: "editor-meta", textContent: `${clipLayout(other.settings)} · ${other.clips.filter((c) => c.status === "done").length}/${other.clips.length} clips` }))),
+        scrollButtons(grid, row), row);
+      otherProjects.append(section);
+      const combined = other.settings.mode === "filming" ? sequenceCard(other, grid, id) : null;
+      grid.replaceChildren(...other.clips.map((c) => clipCard(other, c)),
+        ...(combined ? [combined] : []));
+      // Don't spend API calls generating descriptions for off-screen projects.
+      const load = () => {
+        if (combined) sequenceActivators.get(combined)?.();
+        if (other.clips.some((c) => c.video)) void loadDashboardTexts(other.id, grid, id);
+      };
+      if ("IntersectionObserver" in window) {
+        const observer = new IntersectionObserver((entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) { observer.disconnect(); projectObservers.delete(observer); load(); }
+        }, { root: editor, rootMargin: "300px" });
+        projectObservers.add(observer);
+        observer.observe(section);
+      } else load();
+    }
+  } catch {
+    if (editing === id && !editor.hidden) editorHint.textContent = "Proyek lain belum dapat ditampilkan.";
   }
 }
 
@@ -347,8 +509,13 @@ function route() {
     renderEditor(m[1]);
   } else {
     editing = "";
+    projectObservers.forEach((observer) => observer.disconnect());
+    projectObservers.clear();
+    rowObservers.forEach((observer) => observer.disconnect());
+    rowObservers.clear();
     editor.hidden = true;
     editorClips.querySelectorAll("video").forEach((v) => v.pause());
+    otherProjects.querySelectorAll("video").forEach((v) => v.pause());
     if (modal.hidden) document.body.classList.remove("locked");
   }
 }

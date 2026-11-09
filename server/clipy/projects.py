@@ -530,7 +530,6 @@ def _run(p: Project) -> None:
 
     if not any(c["status"] == "done" for c in p.clips):
         raise RuntimeError(p.clips[0].get("error") or "no clip could be made")
-    _write_posts(p)
     p.status, p.stage, p.progress = "done", "done", 1.0
     p.save()
 
@@ -738,11 +737,6 @@ def _retry(p: Project, n: int) -> None:
     clip = next(c for c in p.clips if c["n"] == n)
     lo, hi = STAGES["clipping"]
     _attempt_clip(p, clip, _load_words(p), _clip_options(p), lo, hi - lo)
-    if clip["status"] == "done":
-        try:
-            ensure_posts(p)
-        except Exception:
-            traceback.print_exc()
     if any(c.get("status") == "done" for c in p.clips):
         p.status, p.stage, p.progress, p.error = "done", "done", 1.0, None
     else:

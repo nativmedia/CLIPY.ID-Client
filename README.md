@@ -210,6 +210,12 @@ Setelah semua clip Filming selesai, tekan **Gabungkan clip** pada hasil proyek. 
 
 Penggabungan memakai FFmpeg stream copy agar tidak merender ulang. Jika ada clip gagal atau format clip tidak cocok, aplikasi menampilkan keterangan; selesaikan atau ulangi clip yang bermasalah, lalu coba lagi.
 
+Pada **Project Dashboard**, setiap proyek memiliki satu baris video tersendiri. Gunakan tombol panah kiri dan kanan pada baris untuk melihat clip lain dan video gabungannya. Pada layar lebar, hingga lima video terlihat sekaligus.
+
+Setiap clip memiliki deskripsi pendek, sedang, dan panjang yang dapat diedit dan disalin. Pembuatan awal memakai API key AI Anda dan dapat memerlukan waktu serta biaya sesuai penyedia. Video gabungan yang sudah dibuat juga tampil di dashboard beserta usulan judul dan deskripsinya. Teks baru tersimpan di proyek; deskripsi lama tidak dihapus.
+
+Pada thumbnail yang dibuat berikutnya, pilihan teks otomatis menggunakan judul clip yang sama. Thumbnail lama tetap seperti semula sampai clip dibuat ulang; pilihan judul manual dan tanpa judul tetap tersedia.
+
 ## Jika ada kendala
 
 - **`git`, `python`, `node`, `npm.cmd`, `ffmpeg`, atau `ffprobe` tidak dikenali:** pastikan program terkait terpasang, tutup PowerShell, lalu buka lagi. Periksa PATH jika masalah berlanjut.
