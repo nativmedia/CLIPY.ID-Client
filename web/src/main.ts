@@ -82,7 +82,6 @@ const play = $<HTMLButtonElement>("#play");
 const uploadInput = $<HTMLInputElement>("#upload-input");
 const uploadPick = $<HTMLButtonElement>("#upload-pick");
 const exportPick = $<HTMLButtonElement>("#export-pick");
-const exportLocation = $<HTMLElement>("#export-location");
 // A local page can ask the server to select a file without copying it.
 // Remote visitors instead select a file in their own browser and upload it.
 const serverIsLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
@@ -95,20 +94,17 @@ const subtitleRemove = $<HTMLButtonElement>("#subtitle-remove");
 
 async function chooseExportDirectory() {
   exportPick.disabled = true;
-  exportLocation.textContent = "membuka pemilih folder…";
+  exportPick.setAttribute("aria-busy", "true");
   try {
     const res = await fetch("/api/export-directory/choose", { method: "POST" });
-    if (res.status === 204) {
-      exportLocation.textContent = exportDir ? `hasil → ${exportDir}` : "folder hasil belum dipilih";
-      return;
-    }
+    if (res.status === 204) return;
     const data = await res.json().catch(() => ({}));
     if (!res.ok || typeof data.path !== "string") throw new Error(typeof data.detail === "string" ? data.detail : "Folder tidak dapat dipilih");
     exportDir = data.path;
-    exportLocation.textContent = `hasil → ${exportDir}`;
-  } catch (err) {
-    exportLocation.textContent = (err as Error).message;
+  } catch {
+    // Keep the compact action row unchanged; the selection can be retried.
   } finally {
+    exportPick.removeAttribute("aria-busy");
     exportPick.disabled = !serverIsLocal;
   }
 }
@@ -116,7 +112,6 @@ async function chooseExportDirectory() {
 exportPick.addEventListener("click", () => void chooseExportDirectory());
 if (!serverIsLocal) {
   exportPick.disabled = true;
-  exportLocation.textContent = "Save As tersedia saat membuka CLIPY di komputer ini";
 }
 
 function clearSubtitle() {

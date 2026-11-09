@@ -304,7 +304,6 @@ body.locked { overflow: hidden; }
 .under { display: flex; align-items: baseline; gap: 16px; }
 .under .hint { flex: 1; min-width: 0; }
 .under .text-button { font-size: 12px; }
-.export-location { min-width: 0; overflow: hidden; color: var(--fg-3); font: 400 11px / 1.5 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .subtitle-upload { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 16px; color: var(--fg-2); font: 400 12px / 1.5 var(--mono); }
 .subtitle-upload #subtitle-name { min-width: 0; overflow-wrap: anywhere; }
 .subtitle-note { flex-basis: 100%; margin: 0; color: var(--fg-2); }
@@ -1225,7 +1224,6 @@ body.locked { overflow: hidden; }
   .under { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; margin-top: 12px; }
   .under .hint { grid-column: 1 / -1; margin: 0; }
   .under .text-button { padding: 8px 0; justify-self: start; }
-  .under .export-location { grid-column: 1 / -1; font-size: 12px; }
   .under #library-open { justify-self: end; }
   .subtitle-upload { gap: 4px 12px; font-size: 14px; }
   .subtitle-upload .text-button { font-size: 14px; }
