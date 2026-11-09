@@ -1296,9 +1296,13 @@ body.locked { overflow: hidden; }
   .project .progress { font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
   .project dl { font-size: 13px; gap: 8px 12px; }
   .clips { gap: 12px; }
-  .clips li { flex-wrap: wrap; align-items: center; gap: 8px 4px; font-size: 14px; }
-  .clips .clip-row-actions { gap: 0; margin-right: -4px; }
-  .clips .t { min-height: 44px; white-space: normal; }
+  /* Keep the sequence number and disclosure marker on the title's first line when it wraps. */
+  .clips li { flex-wrap: wrap; align-items: flex-start; gap: 8px 4px; font-size: 14px; }
+  .clips .clip-row-actions { align-self: center; gap: 0; margin-right: -4px; }
+  .clips > li > .clip-status-icon { align-self: center; }
+  .clips .n { align-self: flex-start; }
+  .clips .t { align-items: flex-start; min-height: 44px; white-space: normal; }
+  .clips .t::before { align-self: flex-start; }
   .clips .t .clip-box { white-space: normal; overflow: visible; }
   .clips .t.reading .scroll { display: inline; animation: none; }
   .clips .t.reading .title-copy { display: none; }
