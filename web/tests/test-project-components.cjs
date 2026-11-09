@@ -50,7 +50,10 @@ test("React project islands preserve settings, preview, retry and cleanup", asyn
   assert.equal(card.querySelectorAll("ol.clips > li").length, 2);
   const download = card.querySelector(".clip-download");
   const openFolder = card.querySelector(".clip-open-folder");
+  const actions = card.querySelector(".clip-row-actions");
   assert.ok(download);
+  assert.ok(actions);
+  assert.equal(actions.lastElementChild, openFolder);
   assert.equal(download.getAttribute("href"), "/clip.mp4");
   assert.ok(download.compareDocumentPosition(openFolder) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
   await act(async () => card.querySelector(".link-title").click());

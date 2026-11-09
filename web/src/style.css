@@ -823,7 +823,7 @@ body.locked { overflow: hidden; }
 .project dd { margin: 0; color: var(--fg-2); overflow-wrap: anywhere; }
 .project .dot { display: inline-block; width: 8px; height: 8px; margin-right: 4px; vertical-align: 0; }
 .clips { grid-column: 1 / -1; min-width: 0; list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
-.clips li { min-width: 0; display: flex; gap: 10px; align-items: baseline; font-size: 11px; color: var(--fg-2); }
+.clips li { min-width: 0; display: flex; gap: 4px; align-items: center; font-size: 11px; color: var(--fg-2); }
 .clips .n { color: var(--fg-3); flex: none; }
 .clips .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
 .clips .link-title {
@@ -864,8 +864,10 @@ body.locked { overflow: hidden; }
 }
 .clips .text-button, .clips .state { flex: none; }
 .clips .state { color: var(--fg-3); }
+.clips .clip-row-actions { display: flex; flex: none; align-items: center; gap: 0; margin-left: auto; margin-right: -4px; }
 .clip-status-icon, .clip-download, .clip-open-folder { flex: none; align-self: center; width: 28px; height: 28px; margin: -5px 0; padding: 5px; border: 0; background: none; color: var(--accent); }
 .clip-status-icon { display: grid; place-items: center; }
+.clips > li > .clip-status-icon { margin-left: auto; margin-right: -4px; }
 .clip-download, .clip-open-folder { display: grid; place-items: center; cursor: pointer; text-decoration: none; }
 .clip-download:hover, .clip-open-folder:hover:not(:disabled) { color: var(--fg); }
 .clip-download:focus-visible, .clip-open-folder:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -1247,9 +1249,10 @@ body.locked { overflow: hidden; }
   .field .blocks { margin-left: 0; }
   .blocks { --bw: 24px; --bh: 48px; transform: none; min-height: 48px; }
   .blocks span { font-size: 20px; }
-  .under { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; align-items: center; margin-top: 12px; }
+  .under { display: grid; grid-template-columns: max-content max-content max-content; justify-content: space-between; gap: 4px 0; align-items: center; margin-top: 12px; }
   .under .hint { grid-column: 1 / -1; margin: 0; }
-  .under .text-button { padding: 8px 0; justify-self: start; }
+  .under .text-button { padding: 8px 0; justify-self: start; white-space: nowrap; }
+  .under #upload-pick { justify-self: center; }
   .under #library-open { justify-self: end; }
   .subtitle-upload { gap: 4px 12px; font-size: 14px; }
   .subtitle-upload .text-button { font-size: 14px; }
@@ -1293,7 +1296,8 @@ body.locked { overflow: hidden; }
   .project .progress { font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
   .project dl { font-size: 13px; gap: 8px 12px; }
   .clips { gap: 12px; }
-  .clips li { flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px; }
+  .clips li { flex-wrap: wrap; align-items: center; gap: 8px 4px; font-size: 14px; }
+  .clips .clip-row-actions { gap: 0; margin-right: -4px; }
   .clips .t { min-height: 44px; white-space: normal; }
   .clips .t .clip-box { white-space: normal; overflow: visible; }
   .clips .t.reading .scroll { display: inline; animation: none; }
