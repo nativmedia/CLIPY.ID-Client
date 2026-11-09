@@ -49,6 +49,7 @@ test("completed clips show real progress and download after server completion", 
   const calls = [];
   global.fetch = async (url, options) => { calls.push([url, options]); return responses.shift(); };
   const [button, download, progress, note] = controller(film()).children;
+  assert.equal(button.textContent, "Gabungkan Clip 1-2");
   assert.equal(button.disabled, true);
   await scheduled.shift()();
   assert.equal(button.disabled, false);
@@ -60,6 +61,7 @@ test("completed clips show real progress and download after server completion", 
   assert.equal(progress.value, 0.75);
   await scheduled.shift()();
   assert.equal(download.hidden, false);
+  assert.equal(button.textContent, "Gabungkan Clip 1-2");
   assert.match(download.href, /test-project\/film-sequence\/download$/);
   assert.equal(progress.hidden, true);
   assert.equal(calls[1][1].method, "POST");
@@ -77,6 +79,8 @@ test("unfinished or failed clips prevent combining without a description", async
   assert.equal(download.hidden, true);
   assert.equal(note.hidden, true);
   assert.equal(controller(film({ clips: [] })), null);
+  const four = film({ settings: { mode: "filming", film: { episodes: 4 }, clip: { count: 4 } } });
+  assert.equal(controller(four).children[0].textContent, "Gabungkan Clip 1-4");
 });
 
 test("backend incompatibility is shown without offering a download", async () => {

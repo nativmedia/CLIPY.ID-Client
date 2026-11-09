@@ -12,11 +12,12 @@ export function filmConcatControls(project: Project): HTMLElement | null {
   if (project.settings.mode !== "filming" || project.clips.length === 0) return null;
 
   const expected = project.settings.film?.episodes ?? project.settings.clip.count;
+  const buttonLabel = `Gabungkan Clip ${expected === 1 ? "1" : `1-${expected}`}`;
   const numbered = [...project.clips].sort((a, b) => a.n - b.n);
   const ready = project.status === "done" && expected > 0 && numbered.length === expected &&
     numbered.every((clip, index) => clip.n === index + 1 && clip.status === "done" && !!clip.video);
   const endpoint = `/api/projects/${encodeURIComponent(project.id)}/film-sequence`;
-  const button = el("button", { type: "button", className: "text-button", textContent: "Gabungkan clip", disabled: true });
+  const button = el("button", { type: "button", className: "text-button", textContent: buttonLabel, disabled: true });
   const download = el("a", { className: "text-button", href: `${endpoint}/download`, download: "", textContent: "Download hasil gabungan", hidden: true });
   const progress = el("progress", { max: 1, value: 0, hidden: true });
   progress.setAttribute("aria-label", "Progres penggabungan clip");
@@ -29,7 +30,7 @@ export function filmConcatControls(project: Project): HTMLElement | null {
     const running = data.status === "running";
     note.hidden = !running && data.status !== "error";
     button.disabled = !ready || running;
-    button.textContent = running ? "Menggabungkan…" : "Gabungkan clip";
+    button.textContent = running ? "Menggabungkan…" : buttonLabel;
     download.hidden = !ready || data.status !== "done";
     progress.hidden = !running;
     if (running) progress.value = Math.max(0, Math.min(1, Number.isFinite(data.progress) ? data.progress : 0));
