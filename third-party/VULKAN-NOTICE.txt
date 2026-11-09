@@ -1,0 +1,10 @@
+CLIPY.ID includes:
+
+whisper.cpp v1.8.1, commit a91dd3be72f70dd1b3cb6e252f35fa17b93f596c
+Copyright (c) the ggml authors. MIT License; see whisper.cpp-MIT.txt.
+Source: https://github.com/ggml-org/whisper.cpp
+
+vulkaninfo from Vulkan SDK 1.4.309.0 / Khronos Vulkan-Tools.
+Copyright (c) LunarG, Inc. and Khronos contributors.
+Apache License 2.0; see Apache-2.0.txt.
+Source: https://github.com/KhronosGroup/Vulkan-Tools

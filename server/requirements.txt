@@ -1,0 +1,20 @@
+fastapi>=0.115
+cryptography==50.0.2
+uvicorn>=0.32
+faster-whisper>=1.1
+yt-dlp>=2025.1.1
+# CUDA 12 runtime libraries for faster-whisper (CTranslate2) on the GPU.
+nvidia-cublas-cu12
+nvidia-cudnn-cu12>=9,<10
+# Clip selection with Claude (other providers are called over plain REST).
+anthropic>=1.0
+# Form uploads (custom thumbnail image).
+python-multipart
+# Thumbnails with title text.
+pillow
+fonttools
+# Intro dubbing voices (Microsoft Edge read-aloud voices).
+edge-tts
+# Speaker framing: YuNet face detection (OpenCV) + jaw movement (MediaPipe Face Landmarker).
+mediapipe
+opencv-contrib-python

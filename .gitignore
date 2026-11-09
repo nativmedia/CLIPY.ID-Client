@@ -1,0 +1,12 @@
+web/node_modules/
+web/dist/
+server/.venv/
+server/data/
+server/models/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.pem
+*.key
+*.p12

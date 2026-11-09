@@ -1,0 +1,485 @@
+"""
+CLIPY.ID API.
+
+    GET    /api/key                          is a key stored? (provider + masked key)
+    POST   /api/key       {key}              check the key with its provider and store it
+    DELETE /api/key                          forget the key
+    GET    /api/options                      every choice the settings form offers
+    POST   /api/uploads   form: file                 a video from this computer → {id, name, duration}
+    GET    /api/uploads/{id}/video                   stream it back for the preview player
+    GET    /api/sources                              videos clipped before (transcript kept), for clipping again
+    POST   /api/projects  form: settings (JSON), url | upload_id (+ title) | reuse (earlier project id),
+                          image? (custom thumbnail), logo? (branding)
+    GET    /api/projects                     all projects, newest first
+    GET    /api/projects/{id}                one project
+    GET    /api/projects/{id}/files/{name}   clip_N.mp4, thumb_N.jpg, clip_N.srt
+    POST   /api/projects/{id}/clips/{n}/retry
+    GET    /api/projects/{id}/posts          titles/descriptions per clip and platform
+    PUT    /api/projects/{id}/posts  {posts} save edits
+
+Run:  .venv/Scripts/python -m uvicorn app:app --port 4748
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import tempfile
+from subprocess import TimeoutExpired
+from contextlib import asynccontextmanager
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
+from fastapi.responses import FileResponse, Response
+from starlette.background import BackgroundTask
+from pydantic import BaseModel, Field, ValidationError, field_validator
+
+from clipy import captions, keys, media, projects, social, thumbs, tts, uploads
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    projects.start_worker()
+    try:
+        yield
+    finally:
+        projects.shutdown_worker()
+
+
+app = FastAPI(title="CLIPY.ID", lifespan=lifespan)
+
+COUNTS = list(range(1, 11))
+DURATIONS = [15, 30, 45, 60, 90, 120]
+
+
+class ClipSettings(BaseModel):
+    ratio: str = Field(pattern="^(" + "|".join(re.escape(r) for r in media.RATIOS) + ")$")
+    fit: str = Field(pattern="^(crop|fit)$")
+    count: int = Field(ge=1, le=10)
+    max_duration: int = Field(ge=10, le=180)
+    dubbing_speed: float = Field(default=1.0, ge=1, le=2)
+
+
+class CaptionSettings(BaseModel):
+    text_style: str = Field(default="plain", pattern="^(outline|plain|shadow|box)$")
+    font: str
+    animation: str
+    position: int | None = Field(default=None, ge=1, le=7)
+    display: str | None = Field(default=None, pattern="^(word|sentence)$")
+    max_lines: int = Field(default=2, ge=1, le=3)
+    color: str = captions.DEFAULT_COLOR
+    case: str
+
+
+class ThumbSettings(BaseModel):
+    source: str = Field(pattern="^(auto|upload)$")
+    title_style: str
+    text: str = Field(default="", max_length=120)
+    numbered: bool = False
+    sequence: str | None = Field(default=None, pattern="^(off|number|letter|episode|part|clip)$")
+    position: str | None = Field(default=None, pattern="^[tmb][lcr]$")
+    voice: str | None = None
+
+
+class BrandSettings(BaseModel):
+    position: str = Field(default="bc", pattern="^(" + "|".join(media.LOGO_POSITIONS) + ")$")
+    # Text instead of (or beside) a logo, e.g. "@yourchannel".
+    text: str = Field(default="", max_length=40)
+    style: str = Field(default="plain", pattern="^(" + "|".join(thumbs.BRAND_STYLES) + ")$")
+    opacity: int = Field(default=60)
+
+    @field_validator("opacity")
+    @classmethod
+    def known_opacity(cls, v: int) -> int:
+        if v not in thumbs.BRAND_OPACITIES:
+            raise ValueError(f"opacity must be one of {thumbs.BRAND_OPACITIES}")
+        return v
+
+
+class FilmSettings(BaseModel):
+    episodes: int = Field(default=4, ge=1, le=10)
+    max_duration: int = Field(default=60, ge=10, le=180)
+    story_mode: str = Field(default="serial", pattern="^(serial|standalone)$")
+    style: str = Field(default="informatif", max_length=500)
+    additional_prompt: str = Field(default="", max_length=2000)
+    voice: str = "id-ID-GadisNeural"
+    source_type: str = Field(default="film", pattern="^(film|recap)$")
+    source_ratio: str = Field(default="auto", pattern=r"^(auto|none|blackbar|1:1|3:4|4:5|5:4|9:16|16:9)$")
+    background: str = Field(default="blur", pattern="^(blur|black|white)$")
+
+
+class Settings(BaseModel):
+    mode: str = Field(default="clipping", pattern="^(clipping|filming)$")
+    film: FilmSettings | None = None
+    mood: str = Field(default="auto", pattern="^(auto|senang|sedih|lucu|serius|seram|informatif|inspiratif|konyol)$")
+    clip: ClipSettings
+    caption: CaptionSettings
+    thumb: ThumbSettings
+    brand: BrandSettings = BrandSettings()
+
+
+IMAGE_TYPES = ("jpg", "jpeg", "png", "webp")
+
+
+async def save_image(p, upload: UploadFile, stem: str) -> str:
+    ext = (upload.filename or "").rsplit(".", 1)[-1].lower()
+    if ext not in IMAGE_TYPES:
+        raise HTTPException(400, "images must be JPG, PNG or WebP")
+    name = f"{stem}.{ext}"
+    (p.dir / name).write_bytes(await upload.read())
+    return name
+
+
+def youtube_id(raw: str) -> str | None:
+    """Same rules as the web app: watch, youtu.be, shorts, embed and live links."""
+    url = urlparse(raw if re.match(r"^https?://", raw, re.I) else f"https://{raw}")
+    host = re.sub(r"^(www|m|music)\.", "", url.hostname or "")
+    vid = None
+    if host == "youtu.be":
+        vid = url.path.lstrip("/").split("/")[0]
+    elif host in ("youtube.com", "youtube-nocookie.com"):
+        vid = parse_qs(url.query).get("v", [None])[0]
+        if not vid:
+            m = re.match(r"^/(?:shorts|embed|live|v)/([^/?#]+)", url.path)
+            vid = m.group(1) if m else None
+    return vid if vid and re.fullmatch(r"[\w-]{11}", vid) else None
+
+
+# ---------- key ----------
+
+class KeyRequest(BaseModel):
+    key: str
+
+
+@app.get("/api/key")
+def get_key():
+    return keys.public(keys.load())
+
+
+@app.post("/api/key")
+def set_key(req: KeyRequest):
+    try:
+        return keys.public(keys.save(req.key))
+    except keys.KeyProblem as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/key")
+def delete_key():
+    keys.clear()
+    return keys.public(None)
+
+
+# ---------- options ----------
+
+@app.get("/api/options")
+def options():
+    return {
+        "ratios": list(media.RATIOS),
+        "fits": media.FITS,
+        "counts": COUNTS,
+        "durations": DURATIONS,
+        **captions.OPTIONS,
+        "title_styles": thumbs.TITLE_STYLES,
+        "voices": tts.VOICES,
+        "logo_positions": media.LOGO_POSITIONS,
+        "brand_styles": thumbs.BRAND_STYLES,
+        "brand_opacities": thumbs.BRAND_OPACITIES,
+        "platforms": social.PLATFORMS,
+    }
+
+
+# ---------- uploads ----------
+
+@app.post("/api/local-files/pick")
+def pick_local_video(request: Request):
+    """Open the server desktop picker only from the local CLIPY web page."""
+    origin = request.headers.get("origin", "")
+    if request.client is None or request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(403, "Hanya tersedia di komputer server")
+    desktop_origin = os.environ.get("CLIPY_DESKTOP_ORIGIN", "")
+    if origin not in ("http://127.0.0.1:4747", "http://localhost:4747") and not (desktop_origin and origin == desktop_origin):
+        raise HTTPException(403, "Pemilih file hanya tersedia dari halaman lokal")
+    allowed_hosts = ("127.0.0.1:4747", "localhost:4747", "127.0.0.1:4748", "localhost:4748", desktop_origin.removeprefix("http://"))
+    if request.headers.get("host", "") not in allowed_hosts:
+        raise HTTPException(403, "Host tidak diizinkan")
+    import tkinter as tk
+    from tkinter import filedialog
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    try:
+        selected = filedialog.askopenfilename(title="Pilih video di komputer server", filetypes=[("Video", "*.mp4 *.mov *.mkv *.webm *.m4v *.avi")], parent=root)
+    finally:
+        root.destroy()
+    if not selected:
+        return Response(status_code=204)
+    try:
+        return uploads.register_local(Path(selected))
+    except (ValueError, OSError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+@app.post("/api/uploads")
+async def upload_video(file: UploadFile = File(...)):
+    """A video from the user's computer, streamed to disk; a project can then use its id."""
+    try:
+        upload_id, path = uploads.new(file.filename or "")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with path.open("wb") as out:
+        while chunk := await file.read(1 << 20):
+            out.write(chunk)
+    try:
+        return uploads.finish(upload_id, path, file.filename or path.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/uploads/{upload_id}/video")
+def uploaded_video(upload_id: str):
+    """Stream an uploaded video back, for the preview player."""
+    path = uploads.path_of(upload_id)
+    if not path:
+        raise HTTPException(404, "no such upload")
+    return FileResponse(path)
+
+
+@app.get("/api/uploads/{upload_id}/poster")
+def uploaded_poster(upload_id: str):
+    poster = uploads.poster_of(upload_id)
+    if not poster:
+        raise HTTPException(404, "no such upload")
+    return FileResponse(poster, media_type="image/jpeg")
+
+
+# ---------- sources (videos clipped before) ----------
+
+@app.get("/api/sources")
+def list_sources():
+    """Videos already clipped whose transcript is kept, for clipping again with new moments."""
+    return projects.sources()
+
+
+# ---------- projects ----------
+
+@app.post("/api/projects")
+async def create_project(
+    settings: str = Form(...),
+    url: str = Form(""),
+    upload_id: str = Form(""),
+    title: str = Form(""),
+    reuse: str = Form(""),
+    image: UploadFile | None = File(None),
+    logo: UploadFile | None = File(None),
+    subtitle: UploadFile | None = File(None),
+):
+    vid = ""
+    base = None
+    if reuse:
+        # Clipping a video done before: the source comes from that project.
+        base = projects.get(reuse)
+        if not base or not (base.dir / "words.json").exists():
+            raise HTTPException(400, "that earlier project is gone; pick the video again")
+        if base.upload_id and not base.local_video:
+            raise HTTPException(400, "that uploaded video is gone; upload it again")
+    elif upload_id:
+        if not uploads.path_of(upload_id):
+            raise HTTPException(400, "that upload is missing; choose the video again")
+    else:
+        vid = youtube_id(url.strip()) or ""
+        if not vid:
+            raise HTTPException(400, "not a YouTube link")
+    if not keys.load():
+        raise HTTPException(400, "insert an API key first")
+    try:
+        s = Settings.model_validate(json.loads(settings))
+    except (json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(400, f"bad settings: {e}")
+    c, t = s.caption, s.thumb
+    if s.mode == "filming" and (not s.film or s.film.voice not in tts.VOICES):
+        raise HTTPException(400, "choose valid filming settings and a narrator voice")
+    if c.font not in captions.FONTS or (c.animation not in captions.ANIMATIONS and c.animation != "word") or c.color not in captions.COLORS or c.case not in captions.CASES:
+        raise HTTPException(400, "unknown caption option")
+    if t.title_style not in thumbs.TITLE_STYLES or (t.voice and t.voice not in tts.VOICES):
+        raise HTTPException(400, "unknown thumbnail option")
+    if t.source == "upload" and not image:
+        raise HTTPException(400, "choose an image to upload")
+
+    for f in (image, logo):
+        if f and (f.filename or "").rsplit(".", 1)[-1].lower() not in IMAGE_TYPES:
+            raise HTTPException(400, "images must be JPG, PNG or WebP")
+
+    subtitle_bytes = None
+    if subtitle:
+        from clipy import subtitles
+        if s.mode != "filming":
+            raise HTTPException(400, "Unggah subtitle hanya tersedia untuk mode filming")
+        if not (subtitle.filename or "").lower().endswith(".srt"):
+            raise HTTPException(400, "Subtitle harus berupa file .srt")
+        subtitle_bytes = await subtitle.read(subtitles.MAX_BYTES + 1)
+        try:
+            subtitles.parse_srt(subtitle_bytes)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+
+    if base:
+        p = projects.reclip(base, s.model_dump())
+    elif upload_id:
+        p = projects.create("", "", s.model_dump(), upload_id=upload_id, title=title.strip()[:200] or "uploaded video")
+    else:
+        p = projects.create(f"https://www.youtube.com/watch?v={vid}", vid, s.model_dump())
+    if t.source == "upload" and image:
+        p.upload = await save_image(p, image, "upload")
+    if logo:
+        p.logo = await save_image(p, logo, "logo")
+    if subtitle_bytes is not None:
+        (p.dir / "source.srt").write_bytes(subtitle_bytes)
+        p.subtitle = "source.srt"
+    p.save()
+    projects.enqueue(p)
+    return p.public()
+
+
+@app.post("/api/projects/{project_id}/clips/{n}/retry")
+def retry_clip(project_id: str, n: int):
+    p = projects.get(project_id)
+    if not p or not any(c["n"] == n for c in p.clips):
+        raise HTTPException(404, "no such clip")
+    if p.status not in ("done", "error") or not (p.dir / "words.json").exists():
+        raise HTTPException(409, "this project can't retry clips right now")
+    try:
+        projects.retry(p, n)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+    return p.public()
+
+
+@app.post("/api/projects/{project_id}/stop")
+def stop_project(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    try:
+        return projects.stop(p).public()
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+    except (OSError, TimeoutExpired) as e:
+        raise HTTPException(503, "Proses belum bisa dihentikan. Coba lagi.") from e
+
+
+@app.post("/api/projects/{project_id}/restart")
+def restart_project(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    try:
+        return projects.restart_unstarted(p).public()
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_stopped_project(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    try:
+        projects.delete_stopped(p)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+    return {"ok": True}
+
+
+@app.get("/api/projects/{project_id}/posts")
+def get_posts(project_id: str):
+    """Titles and descriptions per clip and platform, written on first request if missing."""
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "no such project")
+    try:
+        return projects.ensure_posts(p)
+    except keys.KeyProblem as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"couldn't write the posts: {e}")
+
+
+class PostsUpdate(BaseModel):
+    posts: dict[str, dict[str, dict[str, str]]]
+
+
+@app.put("/api/projects/{project_id}/posts")
+def put_posts(project_id: str, req: PostsUpdate):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "no such project")
+    data = social.load(p.dir) or {}
+    for n, platforms in req.posts.items():
+        for platform, fields in platforms.items():
+            spec = social.PLATFORMS.get(platform)
+            if not spec:
+                continue
+            target = data.setdefault(n, {}).setdefault(platform, {})
+            for name, text in fields.items():
+                if name in spec["fields"]:
+                    target[name] = text[: spec["fields"][name]]
+    return social.save(p.dir, data)
+
+
+@app.get("/api/projects")
+def list_projects():
+    return [p.public() for p in projects.all_projects()]
+
+
+@app.get("/api/projects/{project_id}")
+def get_project(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "no such project")
+    return p.public()
+
+
+@app.get("/api/projects/{project_id}/files/{name}")
+def project_file(project_id: str, name: str):
+    p = projects.get(project_id)
+    if not p or not re.fullmatch(r"(clip_\d+\.(mp4|srt)|thumb_\d+\.jpg|poster\.jpg)", name) or not (p.dir / name).exists():
+        raise HTTPException(404, "not found")
+    media_type = {"mp4": "video/mp4", "srt": "application/x-subrip", "jpg": "image/jpeg"}[name.rsplit(".", 1)[1]]
+    return FileResponse(p.dir / name, media_type=media_type, filename=f"clipy-{p.id}-{name}")
+
+
+@app.get("/api/projects/{project_id}/clip-sequence")
+def clip_sequence(project_id: str):
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    directory = None
+    try:
+        parts = projects.sequence_parts(p)
+        directory = Path(tempfile.mkdtemp(prefix="clipy-sequence-"))
+        output = media.concatenate_clips(parts, directory / "clip-sequence.mp4")
+        return FileResponse(output, media_type="video/mp4", filename=f"clipy-{p.id}-clip-sequence.mp4",
+                            background=BackgroundTask(shutil.rmtree, directory, ignore_errors=True))
+    except ValueError as e:
+        if directory:
+            shutil.rmtree(directory, ignore_errors=True)
+        raise HTTPException(409, str(e)) from e
+    except Exception as e:
+        if directory:
+            shutil.rmtree(directory, ignore_errors=True)
+        raise HTTPException(500, f"Gagal membuat clip sequence: {e}") from e
+
+
+@app.get("/api/projects/{project_id}/assets/{kind}")
+def saved_project_asset(project_id: str, kind: str):
+    """Original logo/thumbnail upload, for restoring an earlier project's form."""
+    p = projects.get(project_id)
+    name = ({"logo": p.logo, "image": p.upload}.get(kind)) if p else None
+    if not p or not name or Path(name).name != name or not (p.dir / name).is_file():
+        raise HTTPException(404, "saved asset not found")
+    content_type = {".png": "image/png", ".webp": "image/webp", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(Path(name).suffix.lower())
+    if not content_type:
+        raise HTTPException(404, "saved asset not found")
+    return FileResponse(p.dir / name, media_type=content_type)
