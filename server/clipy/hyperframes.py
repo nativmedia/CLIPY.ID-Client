@@ -45,11 +45,26 @@ def command(*args, cwd: Path, on_progress=None):
 
 
 def document(folder: Path, width: int, height: int, duration: float, body: str, css: str,
-             config: dict, font: str = "montserrat") -> Path:
+             config: dict, font: str = "montserrat", font_weight: str = "regular") -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     assets = folder / "assets"
     assets.mkdir(exist_ok=True)
-    shutil.copyfile(captions.FONT_DIR / captions.FONT_FILES[font], assets / "font.ttf")
+    weight = captions.font_weight_value(font, font_weight)
+    if font == "poppins":
+        faces = {
+            100: "Poppins-Thin.ttf", 400: "Poppins-Regular.ttf",
+            700: "Poppins-Bold.ttf", 800: "Poppins-ExtraBold.ttf",
+        }
+        for value, name in faces.items():
+            shutil.copyfile(captions.FONT_DIR / name, assets / name)
+        font_face = "".join(
+            f'@font-face{{font-family:Clipy;src:url(assets/{name});font-weight:{value};font-display:swap}}'
+            for value, name in faces.items()
+        )
+    else:
+        shutil.copyfile(captions.FONT_DIR / captions.font_file(font, font_weight), assets / "font.ttf")
+        span = "100 900" if font == "montserrat" else "100 800" if font == "jetbrains-mono" else str(weight)
+        font_face = f"@font-face{{font-family:Clipy;src:url(assets/font.ttf);font-weight:{span};font-display:swap}}"
     gsap = ROOT / "node_modules/gsap/dist/gsap.min.js"
     if gsap.is_file():
         shutil.copyfile(gsap, assets / "gsap.min.js")
@@ -62,7 +77,7 @@ def document(folder: Path, width: int, height: int, duration: float, body: str, 
 <meta name="viewport" content="width={width}, height={height}">
 <script src="assets/gsap.min.js"></script>
 <style>
-@font-face {{font-family: Clipy; src:url(assets/font.ttf)}}
+{font_face}
 * {{box-sizing:border-box}}
 html,body {{margin:0;width:{width}px;height:{height}px;overflow:hidden;background:transparent}}
 #root {{width:100%;height:100%;font-family:Clipy,sans-serif;color:#fff}}
@@ -85,7 +100,7 @@ def caption_composition(folder, words, style, width, height, duration, *, stacke
     center = (height * (0.17 + (style.position - 1) * .11) if style.position is not None else
               height * .88 if stacked else captions.layout_for(width, height).baseline)
     animation = "pop" if style.animation == "word" else style.animation
-    font_weight = captions.font_weight_value(style.font_weight)
+    font_weight = captions.font_weight_value(font, style.font_weight)
     body, cues = [], []
     outline = 0
     for ci, cue in enumerate(captions._caption_cues(words, style, width, height)):
@@ -131,7 +146,7 @@ def caption_composition(folder, words, style, width, height, duration, *, stacke
         cues.append(data)
     css = ".glyph {opacity:0}" if animation == "reveal" else ""
     return document(folder, width, height, duration, "".join(body), css,
-                    {"cues": cues, "color": color, "animation": animation, "outline": outline}, font)
+                    {"cues": cues, "color": color, "animation": animation, "outline": outline}, font, style.font_weight)
 
 
 def render_captions(words, style, out: Path, width, height, duration, *, stacked=False, on_progress=None):
@@ -185,3 +200,4 @@ justify-content:{vertical};align-items:{horizontal};gap:.06em;{gradient}font-siz
     with Image.open(frames[0]) as overlay:
         Image.alpha_composite(base, overlay.convert("RGBA")).convert("RGB").save(out, quality=92)
     return out
+

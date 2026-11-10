@@ -28,11 +28,31 @@ class Chunk:
 
 DEFAULT_COLOR = "white"
 FONT_WEIGHTS = {"thin": 100, "regular": 400, "bold": 700, "extra-bold": 800}
+# The weight control is all-or-nothing: these faces provide every option the
+# UI exposes (100, 400, 700, and 800).  Other families stay at their native
+# regular face rather than relying on fake browser/renderer bolding.
+FONT_WEIGHT_FONTS = frozenset({"jetbrains-mono", "montserrat", "poppins"})
+VARIABLE_WEIGHT_FONTS = frozenset({"jetbrains-mono", "montserrat"})
 
 
-def font_weight_value(weight: str) -> int:
-    """Translate the UI's stable weight names to ASS/CSS numeric weights."""
+def font_weight_value(font: str, weight: str) -> int:
+    """Translate a supported UI weight to ASS/CSS, otherwise use regular."""
+    if font not in FONT_WEIGHT_FONTS:
+        return FONT_WEIGHTS["regular"]
     return FONT_WEIGHTS.get(weight, FONT_WEIGHTS["regular"])
+
+
+def font_file(font: str, weight: str = "regular") -> str:
+    """Return the source file that contains this font's real requested weight."""
+    resolved = font_weight_value(font, weight)
+    if font == "poppins":
+        return {
+            100: "Poppins-Thin.ttf",
+            400: "Poppins-Regular.ttf",
+            700: "Poppins-Bold.ttf",
+            800: "Poppins-ExtraBold.ttf",
+        }[resolved]
+    return FONT_FILES[font]
 
 
 @dataclass
@@ -52,17 +72,15 @@ class CaptionStyle:
 
 # Family names as libass sees them (the TTFs live in server/fonts).
 FONTS = {
-    "montserrat": ("Montserrat", "Montserrat Black"),
+    "montserrat": ("Montserrat", "Montserrat"),
     "anton": ("Anton", "Anton"),
     "bebas": ("Bebas Neue", "Bebas Neue"),
-    "poppins": ("Poppins", "Poppins Black"),
+    "poppins": ("Poppins", "Poppins"),
     "bangers": ("Bangers", "Bangers"),
     "just-me": ("Just Me Again Down Here", "Just Me Again Down Here"),
     "instrument-serif": ("Instrument Serif", "Instrument Serif"),
     "jetbrains-mono": ("JetBrains Mono", "JetBrains Mono"),
     "gaegu": ("Gaegu", "Gaegu"),
-    "cambria": ("Cambria", "Cambria"),
-    "ink-free": ("Ink Free", "Ink Free"),
 }
 ANIMATIONS = {
     "highlight": "Word highlight",
@@ -75,32 +93,33 @@ ANIMATIONS = {
     "fade": "Fade",
 }
 FONT_FILES = {
-    "montserrat": "Montserrat-Black.ttf",
+    "montserrat": "Montserrat[wght].ttf",
     "anton": "Anton-Regular.ttf",
     "bebas": "BebasNeue-Regular.ttf",
-    "poppins": "Poppins-Black.ttf",
+    "poppins": "Poppins-Regular.ttf",
     "bangers": "Bangers-Regular.ttf",
     "just-me": "JustMeAgainDownHere.ttf",
     "instrument-serif": "InstrumentSerif-Regular.ttf",
     "jetbrains-mono": "JetBrainsMono[wght].ttf",
     "gaegu": "Gaegu-Regular.ttf",
-    # These are Windows system fonts. CLIPY's local renderer uses the exact
-    # installed files instead of a visually different bundled substitute.
-    "cambria": Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "cambriab.ttf",
-    "ink-free": Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "Inkfree.ttf",
 }
 FONT_DIR = Path(__file__).resolve().parent.parent / "fonts"
 
 
 @lru_cache(maxsize=96)
-def _font(font: str, size: int):
-    return ImageFont.truetype(str(FONT_DIR / FONT_FILES[font]), size)
+def _font(font: str, size: int, weight: str = "regular"):
+    face = ImageFont.truetype(str(FONT_DIR / font_file(font, weight)), size)
+    if font in VARIABLE_WEIGHT_FONTS:
+        # Both bundled variable files have one Weight axis, so Pillow measures
+        # the exact same glyph weight that is sent to the renderer.
+        face.set_variation_by_axes([font_weight_value(font, weight)])
+    return face
 
 
-@lru_cache(maxsize=len(FONT_FILES))
-def _ass_font_scale(font: str) -> float:
+@lru_cache(maxsize=96)
+def _ass_font_scale(font: str, weight: str = "regular") -> float:
     # ASS sizes refer to the Windows line box; Pillow measures an em at the requested size.
-    with TTFont(FONT_DIR / FONT_FILES[font], lazy=True) as face:
+    with TTFont(FONT_DIR / font_file(font, weight), lazy=True) as face:
         metrics = face["OS/2"]
         return (metrics.usWinAscent + metrics.usWinDescent) / face["head"].unitsPerEm
 COLORS = {
@@ -115,6 +134,7 @@ CASES = {"upper": "UPPERCASE", "lower": "lowercase", "title": "Title Case", "sen
 
 OPTIONS = {
     "fonts": {k: v[0] for k, v in FONTS.items()},
+    "font_weight_fonts": sorted(FONT_WEIGHT_FONTS),
     "animations": ANIMATIONS,
     "colors": COLORS,
     "cases": CASES,
@@ -234,8 +254,9 @@ def _caption_cues(words: list[Word], style: CaptionStyle, width: int, height: in
     single = style.display == "word" or (style.display is None and style.animation == "word")
     sentence = style.display == "sentence"
     font_name = style.font if style.font in FONTS else "montserrat"
+    weight = style.font_weight if font_name in FONT_WEIGHT_FONTS else "regular"
     size = max(1, round(layout.font_size * (1.12 if single else 0.63 if sentence else 1)))
-    font = _font(font_name, size)
+    font = _font(font_name, size, weight)
     limit = width * 0.86
     max_lines = style.max_lines if sentence else 1
     if single:
@@ -265,7 +286,7 @@ def _caption_cues(words: list[Word], style: CaptionStyle, width: int, height: in
             if advance > limit:
                 append_cue()
                 fitted = max(1, int(size * limit / advance))
-                advance = _font(font_name, fitted).getlength(label)
+                advance = _font(font_name, fitted, weight).getlength(label)
                 cues.append(CaptionCue([[(word, label, advance)]], fitted, round(fitted * 1.32),
                                        0, word.start, word.end + LINGER))
                 rows, row_width = [[]], 0.0
@@ -289,8 +310,8 @@ def _caption_cues(words: list[Word], style: CaptionStyle, width: int, height: in
 def build_ass(words: list[Word], style: CaptionStyle, width: int = 1080, height: int = 1920) -> str:
     font_name = style.font if style.font in FONTS else "montserrat"
     family = FONTS[font_name][1]
-    font_scale = _ass_font_scale(font_name)
-    font_weight = font_weight_value(style.font_weight)
+    font_weight = font_weight_value(font_name, style.font_weight)
+    font_scale = _ass_font_scale(font_name, style.font_weight)
     hi = tag_color(COLORS.get(style.color, COLORS[DEFAULT_COLOR]))
     white = tag_color("#FFFFFF")
     black = tag_color("#000000")
@@ -408,3 +429,4 @@ def build_srt(words: list[Word], style: CaptionStyle | None = None, width: int =
             for c in _caption_cues(words, style or CaptionStyle(), width, height)]
     return "\n".join(f"{n}\n{srt_time(start)} --> {srt_time(end)}\n{text}\n"
                      for n, (start, end, text) in enumerate(cues, 1) if end > start)
+

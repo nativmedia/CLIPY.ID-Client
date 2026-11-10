@@ -540,6 +540,8 @@ body.locked { overflow: hidden; }
 }
 .preview-pick:has(select:invalid) .option-trigger { color: var(--fg-3); }
 .option-trigger:hover, .option-trigger:focus-visible { border-color: var(--accent); }
+.preview-pick.is-disabled .option-trigger { color: var(--fg-3); border-color: var(--line); cursor: not-allowed; opacity: .56; }
+.preview-pick.is-disabled .option-trigger:hover, .preview-pick.is-disabled .option-trigger:focus-visible { border-color: var(--line); }
 .option-list {
   position: absolute;
   z-index: 5;
@@ -571,10 +573,13 @@ body.locked { overflow: hidden; }
 :root[data-theme="light"] .option-preview img {
   filter: drop-shadow(0 1px 1px #171b26) drop-shadow(0 0 1px #171b26);
 }
-@font-face { font-family: "Clipy Montserrat"; src: url("/fonts/Montserrat-Black.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "Clipy Montserrat"; src: url("/fonts/Montserrat[wght].ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: "Clipy Anton"; src: url("/fonts/Anton-Regular.ttf") format("truetype"); font-display: swap; }
 @font-face { font-family: "Clipy Bebas"; src: url("/fonts/BebasNeue-Regular.ttf") format("truetype"); font-display: swap; }
-@font-face { font-family: "Clipy Poppins"; src: url("/fonts/Poppins-Black.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "Clipy Poppins"; src: url("/fonts/Poppins-Thin.ttf") format("truetype"); font-weight: 100; font-display: swap; }
+@font-face { font-family: "Clipy Poppins"; src: url("/fonts/Poppins-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Clipy Poppins"; src: url("/fonts/Poppins-Bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Clipy Poppins"; src: url("/fonts/Poppins-ExtraBold.ttf") format("truetype"); font-weight: 800; font-display: swap; }
 @font-face { font-family: "Clipy Bangers"; src: url("/fonts/Bangers-Regular.ttf") format("truetype"); font-display: swap; }
 @font-face { font-family: "Clipy Just Me"; src: url("/fonts/JustMeAgainDownHere.ttf") format("truetype"); font-display: swap; }
 @font-face { font-family: "Clipy Instrument Serif"; src: url("/fonts/InstrumentSerif-Regular.ttf") format("truetype"); font-display: swap; }
@@ -589,17 +594,24 @@ body.locked { overflow: hidden; }
 .font-pick [data-font="instrument-serif"] { font-family: "Clipy Instrument Serif", serif; }
 .font-pick [data-font="jetbrains-mono"] { font-family: "Clipy JetBrains Mono", monospace; }
 .font-pick [data-font="gaegu"] { font-family: "Clipy Gaegu", cursive; }
-.font-pick [data-font="cambria"] { font-family: Cambria, Georgia, serif; }
-.font-pick [data-font="ink-free"] { font-family: "Ink Free", "Segoe Print", cursive; }
 .font-pick .option-preview { font-size: 15px; }
-/* The menu compares families, not their display treatment: every sample stays regular. */
-.font-pick .option-list .option-preview { font-family: var(--mono) !important; font-weight: 400; font-style: normal; }
 .font-pick .option-list,
+.font-weight-pick .option-list,
 .preview-pick:has(#opt-brand-style) .option-list {
   grid-template-columns: minmax(0, 1fr);
   width: 100%;
   min-width: 156px;
 }
+.font-weight-pick .option-preview {
+  min-height: 34px;
+}
+.font-weight-pick[data-weight-font="montserrat"] .option-preview, .font-weight-pick[data-weight-font="montserrat"] .option-trigger { font-family: "Clipy Montserrat", sans-serif; }
+.font-weight-pick[data-weight-font="poppins"] .option-preview, .font-weight-pick[data-weight-font="poppins"] .option-trigger { font-family: "Clipy Poppins", sans-serif; }
+.font-weight-pick[data-weight-font="jetbrains-mono"] .option-preview, .font-weight-pick[data-weight-font="jetbrains-mono"] .option-trigger { font-family: "Clipy JetBrains Mono", monospace; }
+.font-weight-pick .option-preview[data-font-weight="thin"] { font-weight: 100; }
+.font-weight-pick .option-preview[data-font-weight="regular"] { font-weight: 400; }
+.font-weight-pick .option-preview[data-font-weight="bold"] { font-weight: 700; }
+.font-weight-pick .option-preview[data-font-weight="extra-bold"] { font-weight: 800; }
 @media (max-width: 720px) {
   .option-trigger { padding-left: 12px; padding-right: 28px; }
   .preview-pick:nth-child(even) .option-list { inset-inline: auto 0; }
@@ -1440,3 +1452,4 @@ body.locked { overflow: hidden; }
   #key-form #key { width: 100%; min-width: 0; border-bottom: 1px solid var(--line); }
   #key-insert { justify-self: start; max-width: 100%; --bw: min(24px, calc((100vw - 48px) / 6)); }
 }
+

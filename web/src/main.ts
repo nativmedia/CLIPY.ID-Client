@@ -584,6 +584,7 @@ type Options = {
   counts: number[];
   durations: number[];
   fonts: Record<string, string>;
+  font_weight_fonts?: string[];
   animations: Record<string, string>;
   colors: Record<string, string>;
   cases: Record<string, string>;
@@ -594,16 +595,14 @@ type Options = {
   brand_opacities: number[];
 };
 
-// These faces are available in the Windows renderer. Keep them in the picker
+// These bundled Google Fonts stay in the picker during a backend restart so a
 // during a backend restart so a temporarily stale options response is not
 // allowed to erase the user's font choices.
-const LOCAL_WINDOWS_FONTS: Record<string, string> = {
+const LOCAL_GOOGLE_FONTS: Record<string, string> = {
   "just-me": "Just Me Again Down Here",
   "instrument-serif": "Instrument Serif",
   "jetbrains-mono": "JetBrains Mono",
   gaegu: "Gaegu",
-  cambria: "Cambria",
-  "ink-free": "Ink Free",
 };
 
 type KeyState = { set: boolean; label?: string; masked?: string };
@@ -771,10 +770,12 @@ const logoPick = $<HTMLButtonElement>("#opt-logo-pick");
 const logoPreview = $<HTMLImageElement>("#opt-logo-preview");
 const captionPosition = $<HTMLSelectElement>("#opt-caption-position");
 const captionWeight = $<HTMLSelectElement>("#opt-caption-weight");
+const syncFontPreview = previewSelect(sel.font, "font");
+const syncCaptionWeightPreview = previewSelect(captionWeight, "font-weight");
 const syncPreviews = [
-  previewSelect(sel.font, "font"),
+  syncFontPreview,
   previewSelect(sel.animation, "animation"),
-  previewSelect(captionWeight, "font-weight"),
+  syncCaptionWeightPreview,
   previewSelect(sel.titleStyle, "title-style"),
 ];
 const captionLines = $<HTMLSelectElement>("#opt-caption-lines");
@@ -810,6 +811,17 @@ const startHint = $<HTMLParagraphElement>("#start-hint");
 let options: Options | null = null;
 let optionsLoading: Promise<void> | null = null;
 const DEFAULT_CAPTION_COLOR = "white";
+const LOCAL_WEIGHT_FONTS = new Set(["jetbrains-mono", "montserrat", "poppins"]);
+
+function syncCaptionWeightAvailability() {
+  const compatible = new Set(options?.font_weight_fonts?.length ? options.font_weight_fonts : LOCAL_WEIGHT_FONTS)
+    .has(sel.font.value);
+  captionWeight.disabled = !compatible;
+  if (!compatible) captionWeight.value = "regular";
+  captionWeight.parentElement!.dataset.weightFont = sel.font.value;
+  captionWeight.title = compatible ? "" : "Font ini hanya memiliki satu bobot asli; memakai Regular.";
+  syncCaptionWeightPreview();
+}
 let color = DEFAULT_CAPTION_COLOR;
 let logoPosition = "bc";
 let started = false;
@@ -906,11 +918,12 @@ async function populateOptions() {
   const narrator = filmVoice.value;
   const branding = { style: brandStyle.value, opacity: brandOpacity.value };
   const animation = sel.animation.value;
-  options = { ...o, fonts: { ...LOCAL_WINDOWS_FONTS, ...o.fonts } };
+  options = { ...o, fonts: { ...LOCAL_GOOGLE_FONTS, ...o.fonts } };
   fill(sel.ratio, o.ratios.map((r) => [r, r]));
   fill(sel.count, o.counts.map((n) => [String(n), `${n} clip${n > 1 ? "s" : ""}`]));
   fill(sel.duration, o.durations.map((d) => [String(d), `≤ ${d}s`]));
   fill(sel.font, Object.entries(options.fonts));
+  syncCaptionWeightAvailability();
   fill(sel.animation, Object.entries(o.animations));
   if (animation === "word" && !("word" in o.animations) && "pop" in o.animations) {
     sel.animation.value = "pop";
@@ -1060,6 +1073,7 @@ function setStarted(value: boolean) {
 }
 
 function progress() {
+  syncCaptionWeightAvailability();
   updateMusicRange();
   sel.titleStyle.parentElement!.hidden = thumbTextMode.value === "none";
   thumbText.hidden = thumbTextMode.value !== "manual";
@@ -1580,3 +1594,4 @@ function clearVideoPreset() {
   field.addEventListener("change", clearVideoPreset);
 });
 swatches.addEventListener("click", clearVideoPreset);
+

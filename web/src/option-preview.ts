@@ -13,12 +13,17 @@ export function previewSelect(select: HTMLSelectElement, group: string) {
   trigger.setAttribute("aria-haspopup", "listbox");
   field.classList.add("preview-pick");
   if (group === "font") field.classList.add("font-pick");
+  if (group === "font-weight") field.classList.add("font-weight-pick");
   select.after(trigger, list);
 
   const sync = () => {
     trigger.textContent = select.selectedOptions[0]?.text ?? "choose";
     if (group === "font") trigger.dataset.font = select.value;
+    trigger.disabled = select.disabled;
+    trigger.title = select.title;
+    field.classList.toggle("is-disabled", select.disabled);
     trigger.setAttribute("aria-label", `${label}: ${trigger.textContent}`);
+    trigger.setAttribute("aria-disabled", String(select.disabled));
     trigger.setAttribute("aria-expanded", String(!list.hidden));
     trigger.setAttribute("aria-invalid", select.getAttribute("aria-invalid") ?? "false");
   };
@@ -28,6 +33,7 @@ export function previewSelect(select: HTMLSelectElement, group: string) {
     if (focus) trigger.focus({ preventScroll: true });
   };
   const show = () => {
+    if (select.disabled) return;
     if (!list.hidden) return close(true);
     const options = Array.from(select.options).filter((option) => !option.disabled && !option.hidden);
     if (!options.length) return;
@@ -39,6 +45,7 @@ export function previewSelect(select: HTMLSelectElement, group: string) {
       );
       if (styledName) button.setAttribute("aria-label", option.text);
       if (group === "font") button.dataset.font = option.value;
+      if (group === "font-weight") button.dataset.fontWeight = option.value;
       button.setAttribute("role", "option");
       button.setAttribute("aria-selected", String(option.selected));
       button.tabIndex = -1;
@@ -90,3 +97,4 @@ export function previewSelect(select: HTMLSelectElement, group: string) {
   sync();
   return sync;
 }
+
