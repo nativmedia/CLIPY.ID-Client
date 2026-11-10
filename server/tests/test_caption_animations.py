@@ -11,6 +11,9 @@ class CaptionAnimationTests(unittest.TestCase):
             "instrument-serif": ("Instrument Serif", "Instrument Serif"),
             "jetbrains-mono": ("JetBrains Mono", "JetBrains Mono"),
             "gaegu": ("Gaegu", "Gaegu"),
+            "cambria": ("Cambria", "Cambria"),
+            "consolas": ("Consolas", "Consolas"),
+            "ink-free": ("Ink Free", "Ink Free"),
         }
         words = [captions.Word("Halo", 0, .4)]
         for name, (label, family) in expected.items():
