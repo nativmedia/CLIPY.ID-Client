@@ -798,10 +798,12 @@ body.locked { overflow: hidden; }
 }
 .project-control { position: absolute; right: 0; top: 0; z-index: 1; }
 .project h3 { padding-right: 0; }
-.project-heading { display: flex; align-items: flex-start; min-width: 0; padding-right: 42px; }
+.project-heading { display: flex; align-items: flex-start; min-width: 0; }
+.project.has-project-control .project-heading { padding-right: 42px; }
 .project-heading .project-title { flex: 1; min-width: 0; }
 .project:last-child { border-bottom: 0; }
-.project-open { padding: 0; border: 0; background: none; cursor: pointer; align-self: start; }
+.project-source { width: 104px; display: grid; gap: 8px; align-content: start; }
+.project-open { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; }
 .project-thumb {
   display: block;
   width: 104px;
@@ -831,12 +833,10 @@ body.locked { overflow: hidden; }
 .project-title:hover { color: var(--accent); }
 .project-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .project-dashboard-open {
-  position: absolute; top: 0; right: 0; z-index: 1;
-  display: grid; place-items: center; width: 32px; height: 32px; padding: 5px;
+  display: grid; place-items: center; width: 100%; min-height: 30px; padding: 6px 5px;
   border: 1px solid var(--line); border-radius: 0; background: transparent; color: var(--accent); cursor: pointer;
+  font: 600 10px / 1.2 var(--mono); letter-spacing: 0; text-align: center;
 }
-.project.has-project-control .project-dashboard-open { top: 40px; }
-.project-dashboard-open svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linejoin: miter; stroke-width: 1.7; }
 .project-dashboard-open:hover { border-color: var(--accent); background: var(--surface-2); }
 .project-dashboard-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .project .progress { margin: 6px 0 0; font-size: 11px; color: var(--fg-2); white-space: pre; overflow: hidden; text-overflow: ellipsis; }
@@ -1322,7 +1322,8 @@ body.locked { overflow: hidden; }
   .title, .project-title, .library-item .name, .modal-title { font-size: 16px; line-height: 1.5; }
   .projects { margin-top: 32px; padding-bottom: env(safe-area-inset-bottom); }
   .project { grid-template-columns: 80px minmax(0, 1fr); gap: 16px; padding: 20px 0; }
-  .project-thumb { width: 80px; }
+  .project-source, .project-thumb { width: 80px; }
+  .project-dashboard-open { min-height: 44px; padding: 7px 4px; }
   .project > div { min-width: 0; }
   .project-title { min-height: 44px; overflow-wrap: anywhere; }
   .project .progress { font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
@@ -1366,7 +1367,7 @@ body.locked { overflow: hidden; }
 
 @media (max-width: 380px) {
   .project { grid-template-columns: minmax(0, 1fr); }
-  .project-thumb { width: 128px; }
+  .project-source, .project-thumb { width: 128px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

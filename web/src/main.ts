@@ -1401,25 +1401,6 @@ const POSITION_NAMES: Record<string, string> = {
   tl: "top left", tc: "top", tr: "top right", ml: "left", mc: "center", mr: "right", bl: "bottom left", bc: "bottom", br: "bottom right",
 };
 
-function dashboardIcon() {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 20 20");
-  svg.setAttribute("aria-hidden", "true");
-  // Two offset frames make this read as an open dashboard, not an external link.
-  const back = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  back.setAttribute("x", "3");
-  back.setAttribute("y", "2");
-  back.setAttribute("width", "12");
-  back.setAttribute("height", "12");
-  const front = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  front.setAttribute("x", "6");
-  front.setAttribute("y", "5");
-  front.setAttribute("width", "12");
-  front.setAttribute("height", "12");
-  svg.append(back, front);
-  return svg;
-}
-
 function projectCard(p: Project): HTMLLIElement {
   const s = p.settings;
   const running = !["done", "error", "cancelled"].includes(p.status);
@@ -1450,9 +1431,10 @@ function projectCard(p: Project): HTMLLIElement {
     cover.addEventListener("click", () => { void openSource(cover); });
     heading.addEventListener("click", () => { void openSource(heading); });
   }
-  const dashboard = el("button", { type: "button", className: "project-dashboard-open", title: "Buka dashboard project", ariaLabel: "Buka dashboard project" }, dashboardIcon());
+  const dashboard = el("button", { type: "button", className: "project-dashboard-open", title: "Buka dashboard project", textContent: "Open Dashboard" });
   dashboard.addEventListener("click", () => openEditor(p.id));
-  const headingRow = el("div", { className: "project-heading" }, heading, dashboard);
+  const headingRow = el("div", { className: "project-heading" }, heading);
+  const source = el("div", { className: "project-source" }, cover, dashboard);
 
   const removable = p.status === "cancelled" || p.status === "error";
   const hasProjectControl = running || removable;
@@ -1505,7 +1487,7 @@ function projectCard(p: Project): HTMLLIElement {
     "li",
     { className: `project${hasProjectControl ? " has-project-control" : ""}` },
     control,
-    cover,
+    source,
     el("div", {}, el("h3", {}, headingRow), status, restartable && restart, meta),
     p.clips.length > 0 && mountClipResults({ project: p, onPreview: openPreview, onRetry: retryClip, onRefresh: () => { void refreshProjects(); } }),
     filmConcatControls(p),
