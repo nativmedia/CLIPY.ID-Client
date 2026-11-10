@@ -590,7 +590,6 @@ body.locked { overflow: hidden; }
 .font-pick [data-font="jetbrains-mono"] { font-family: "Clipy JetBrains Mono", monospace; }
 .font-pick [data-font="gaegu"] { font-family: "Clipy Gaegu", cursive; }
 .font-pick [data-font="cambria"] { font-family: Cambria, Georgia, serif; }
-.font-pick [data-font="consolas"] { font-family: Consolas, "Courier New", monospace; }
 .font-pick [data-font="ink-free"] { font-family: "Ink Free", "Segoe Print", cursive; }
 .font-pick .option-preview { font-size: 15px; }
 .font-pick .option-list,
