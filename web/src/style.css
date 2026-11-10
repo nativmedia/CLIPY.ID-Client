@@ -458,7 +458,7 @@ body.locked { overflow: hidden; }
 .caption-kicker { margin-top: 30px; }
 
 .pick { display: flex; flex-direction: column; min-width: 0; position: relative; }
-.pick:has(> :is(input, select)[required], > [aria-required="true"])::before {
+.pick:has(> :is(input, select)[required]:enabled, > [aria-required="true"])::before {
   content: "*";
   position: absolute;
   top: 0;
@@ -489,11 +489,12 @@ body.locked { overflow: hidden; }
   text-overflow: ellipsis;
   transition: border-color 0.2s ease;
 }
-.pick select:focus, .pick select:hover { border-bottom-color: var(--fg); }
+.pick select:enabled:is(:focus, :hover) { border-bottom-color: var(--fg); }
+.pick select:disabled { color: var(--fg-3); cursor: not-allowed; }
 .pick select:invalid { color: var(--fg-3); }
 .pick select option { background: var(--surface); color: var(--fg); }
 /* Caret, drawn as a glyph so it matches the type. */
-.pick:has(select)::after {
+.pick:has(select:enabled)::after {
   content: "▾";
   position: absolute;
   right: 2px;
@@ -653,6 +654,14 @@ body.locked { overflow: hidden; }
 }
 .text-pick::placeholder { color: var(--fg-3); }
 .text-pick:focus, .text-pick:hover { border-bottom-color: var(--fg); }
+.film-prompt > .text-pick {
+  height: auto;
+  min-height: 28px;
+  padding-block: 4px;
+  line-height: 1.4;
+}
+.film-prompt > textarea { resize: vertical; }
+.pick.film-prompt > span { margin-top: 4px; }
 
 .episode-pick input[type="number"] { appearance: textfield; padding-right: 34px; }
 .episode-pick input::-webkit-inner-spin-button,
@@ -1290,6 +1299,7 @@ body.locked { overflow: hidden; }
   .pick > span { margin-top: 8px; }
   .pick .file-pick { font-size: 14px; white-space: normal; }
   .text-pick { padding-right: 14px; }
+  .film-prompt > .text-pick { min-height: 44px; padding-block: 7px; }
   .logo-pick { padding: 12px 14px; }
   .swatches { height: auto; min-height: 52px; gap: 8px; flex-wrap: wrap; padding: 8px; border: 1px solid var(--line); }
   .swatches button { width: 44px; height: 44px; max-width: none; max-height: none; border: 7px solid var(--surface-2); }

@@ -520,7 +520,7 @@ async function useLastSettings(source: LocalSource, action: HTMLButtonElement, s
     fillAnimations(s.caption.animation === "word" ? "pop" : s.caption.animation, true);
     captionLines.value = String(s.caption.max_lines ?? 2);
     setThumbPosition(s.thumb.position ?? "bc");
-    sel.case.value = s.caption.case;
+    preferredCaptionCase = s.caption.case;
     color = s.caption.color;
     swatches.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.color === color)));
     sel.source.value = s.thumb.source;
@@ -595,6 +595,7 @@ type Options = {
   durations: number[];
   fonts: Record<string, string>;
   font_weight_fonts?: string[];
+  uppercase_only_fonts?: string[];
   animations: Record<string, string>;
   colors: Record<string, string>;
   cases: Record<string, string>;
@@ -821,6 +822,9 @@ const startHint = $<HTMLParagraphElement>("#start-hint");
 let options: Options | null = null;
 let optionsLoading: Promise<void> | null = null;
 const DEFAULT_CAPTION_COLOR = "white";
+const DEFAULT_CAPTION_CASE = "title";
+const THUMBNAIL_DEFAULTS = { source: "auto", titleStyle: "pop", voice: "none" };
+let preferredCaptionCase = DEFAULT_CAPTION_CASE;
 const LOCAL_WEIGHT_FONTS = new Set(["jetbrains-mono", "montserrat", "poppins"]);
 
 function syncCaptionWeightAvailability() {
@@ -832,6 +836,13 @@ function syncCaptionWeightAvailability() {
   captionWeight.title = compatible ? "" : "Font ini hanya memiliki satu bobot asli; memakai Regular.";
   syncCaptionWeightPreview();
 }
+function syncCaptionCaseAvailability() {
+  const uppercaseOnly = options?.uppercase_only_fonts?.includes(sel.font.value) ?? false;
+  sel.case.disabled = uppercaseOnly;
+  sel.case.value = uppercaseOnly ? "upper" : preferredCaptionCase;
+  sel.case.parentElement!.title = uppercaseOnly ? "Font ini hanya menampilkan huruf kapital." : "";
+}
+
 let color = DEFAULT_CAPTION_COLOR;
 let logoPosition = "bc";
 let started = false;
@@ -881,13 +892,13 @@ function reveal(step: HTMLElement) {
   stage.classList.add("flowing");
 }
 
-function fill(select: HTMLSelectElement, entries: [string, string][], placeholder = "choose") {
+function fill(select: HTMLSelectElement, entries: [string, string][], fallback = "") {
   const previous = select.value;
   select.replaceChildren(
-    el("option", { value: "", disabled: true, selected: true, hidden: true, textContent: placeholder }),
+    el("option", { value: "", disabled: true, selected: true, hidden: true, textContent: "choose" }),
     ...entries.map(([value, label]) => el("option", { value, textContent: label })),
   );
-  if (entries.some(([value]) => value === previous)) select.value = previous;
+  select.value = entries.some(([value]) => value === previous) ? previous : fallback;
 }
 
 function loadOptions(): Promise<void> {
@@ -918,9 +929,9 @@ async function populateOptions() {
   syncCaptionWeightAvailability();
   fillAnimations(animation);
   fill(sel.case, Object.entries(o.cases));
-  fill(sel.source, [["auto", "auto (from clip)"], ["upload", "upload image"]]);
-  fill(sel.titleStyle, Object.entries(o.title_styles));
-  fill(sel.voice, [["none", "no dubbing"], ...Object.entries(o.voices)]);
+  fill(sel.source, [["auto", "auto (from clip)"], ["upload", "upload image"]], THUMBNAIL_DEFAULTS.source);
+  fill(sel.titleStyle, Object.entries(o.title_styles), THUMBNAIL_DEFAULTS.titleStyle);
+  fill(sel.voice, [["none", "No Voice Over"], ...Object.entries(o.voices)], THUMBNAIL_DEFAULTS.voice);
   filmVoice.replaceChildren(...Object.entries(o.voices).map(([value, label]) => el("option", { value, textContent: label })));
   if (narrator in o.voices) filmVoice.value = narrator;
   if (!(color in o.colors)) color = DEFAULT_CAPTION_COLOR;
@@ -1028,7 +1039,7 @@ function missingFields(): HTMLElement[] {
     sel.source);
   if (thumbTextMode.value !== "none") selects.push(sel.titleStyle);
   if (captionMode.value === "sentence") selects.push(captionLines);
-  const missing: HTMLElement[] = selects.filter((field) => !field.value);
+  const missing: HTMLElement[] = selects.filter((field) => !field.disabled && !field.value);
   if (filming && !filmEpisodes.validity.valid) missing.push(filmEpisodes);
   if (filming && !filmDubSpeed.validity.valid) missing.push(filmDubSpeed);
   if (thumbTextMode.value === "manual" && !thumbText.value.trim()) missing.push(thumbText);
@@ -1063,6 +1074,7 @@ function setStarted(value: boolean) {
 
 function progress() {
   syncCaptionWeightAvailability();
+  syncCaptionCaseAvailability();
   updateMusicRange();
   sel.titleStyle.parentElement!.hidden = thumbTextMode.value === "none";
   thumbText.hidden = thumbTextMode.value !== "manual";
@@ -1071,7 +1083,7 @@ function progress() {
   const noTitle = sel.titleStyle.querySelector<HTMLOptionElement>('option[value="none"]');
   if (noTitle) {
     noTitle.hidden = noTitle.disabled = true;
-    if (thumbTextMode.value !== "none" && sel.titleStyle.value === "none") sel.titleStyle.value = "bold";
+    if (thumbTextMode.value !== "none" && sel.titleStyle.value === "none") sel.titleStyle.value = THUMBNAIL_DEFAULTS.titleStyle;
   }
   const missing = missingFields();
   startButton.setAttribute("aria-disabled", String(
@@ -1087,6 +1099,9 @@ function progress() {
   syncPreviews.forEach((sync) => sync());
 }
 
+sel.case.addEventListener("change", () => {
+  if (!sel.case.disabled) preferredCaptionCase = sel.case.value;
+});
 Object.values(sel).forEach((s) => s.addEventListener("change", progress));
 for (const [buttonId, step] of [["#film-episodes-up", 1], ["#film-episodes-down", -1]] as const) {
   $<HTMLButtonElement>(buttonId).addEventListener("click", () => {
@@ -1296,6 +1311,10 @@ function resetAll(focus = true, keepSource = false) {
   }
   setHint(hint, HINT);
   Object.values(sel).forEach((s) => (s.selectedIndex = 0));
+  preferredCaptionCase = DEFAULT_CAPTION_CASE;
+  sel.source.value = THUMBNAIL_DEFAULTS.source;
+  sel.titleStyle.value = THUMBNAIL_DEFAULTS.titleStyle;
+  sel.voice.value = THUMBNAIL_DEFAULTS.voice;
   color = DEFAULT_CAPTION_COLOR;
   swatches.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.color === color)));
   imageInput.value = "";
@@ -1561,7 +1580,8 @@ videoPreset.addEventListener("change", () => {
   if (!preset || !options) return;
   // Presets intentionally affect only the manual caption and thumbnail controls below.
   // Mood and all clip/filming settings above remain exactly as the user chose them.
-  sel.font.value = preset.font; sel.case.value = preset.letterCase;
+  sel.font.value = preset.font;
+  preferredCaptionCase = preset.letterCase;
   captionMode.value = preset.display; fillAnimations(preset.animation); captionLines.value = "2"; captionPosition.value = "5";
   captionWeight.value = preset.fontWeight; color = preset.color;
   swatches.querySelectorAll<HTMLButtonElement>("button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.color === color)));

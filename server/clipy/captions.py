@@ -32,6 +32,8 @@ FONT_WEIGHTS = {"thin": 100, "regular": 400, "bold": 700, "extra-bold": 800}
 # UI exposes (100, 400, 700, and 800).  Other families stay at their native
 # regular face rather than relying on fake browser/renderer bolding.
 FONT_WEIGHT_FONTS = frozenset({"jetbrains-mono", "montserrat", "poppins"})
+# Bangers has a few alternate capital glyphs in its lowercase slots.
+UPPERCASE_ONLY_FONTS = frozenset({"bangers", "bebas"})
 VARIABLE_WEIGHT_FONTS = frozenset({"jetbrains-mono", "montserrat"})
 
 
@@ -154,6 +156,7 @@ CASES = {"upper": "UPPERCASE", "lower": "lowercase", "title": "Title Case", "sen
 OPTIONS = {
     "fonts": dict(sorted(((k, v[0]) for k, v in FONTS.items()), key=lambda item: item[1].casefold())),
     "font_weight_fonts": sorted(FONT_WEIGHT_FONTS),
+    "uppercase_only_fonts": sorted(UPPERCASE_ONLY_FONTS),
     "animations": ANIMATIONS,
     "colors": COLORS,
     "cases": CASES,
