@@ -59,7 +59,8 @@ async function assertApiPortFree() {
 }
 
 async function waitForApi() {
-  for (let attempt = 0; attempt < 180; attempt++) {
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
     abort.signal.throwIfAborted();
     try {
       const response = await fetch(apiUrl + "/openapi.json", { signal: AbortSignal.timeout(1000) });
@@ -83,6 +84,7 @@ try {
     server: { port: 4757, strictPort: true, proxy: { "/api": apiUrl } },
   });
   await frontend.listen();
+  console.log("Menyiapkan server lokal CLIPY.ID...");
   api = start(python, ["desktop_dev.py"], server, "pipe");
   api.child.stdin.on("error", () => {});
   const apiStopped = api.exited.then(({ code }) => {
@@ -91,7 +93,11 @@ try {
   await Promise.race([waitForApi(), apiStopped]);
   abort.signal.throwIfAborted();
 
-  desktop = start(process.execPath, [tauriCli, "dev", "--no-watch"], web);
+  const options = await fetch("http://127.0.0.1:4757/api/options", { signal: AbortSignal.timeout(3000) });
+  if (!options.ok || !(await options.json()).ratios?.includes("9:16")) {
+    throw new Error("Tampilan CLIPY.ID tidak dapat terhubung ke server lokal.");
+  }
+  desktop = start(process.execPath, [tauriCli, "dev", "--no-watch", "--", "--locked"], web);
   const result = await Promise.race([
     desktop.exited,
     apiStopped,

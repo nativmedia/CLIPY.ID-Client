@@ -19,5 +19,8 @@ edge-tts
 # Current releases provide macOS wheels for Apple Silicon. Intel uses the
 # last compatible CPython 3.12 line with an Intel macOS wheel.
 mediapipe==0.10.21; sys_platform == "darwin" and platform_machine == "x86_64"
+# Newer jaxlib builds omit Intel macOS. This pair also accepts MediaPipe's NumPy 1.x.
+jax==0.4.38; sys_platform == "darwin" and platform_machine == "x86_64"
 mediapipe; sys_platform != "darwin" or platform_machine != "x86_64"
-opencv-contrib-python
+opencv-contrib-python<4.12; sys_platform == "darwin" and platform_machine == "x86_64"
+opencv-contrib-python; sys_platform != "darwin" or platform_machine != "x86_64"
