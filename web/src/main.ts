@@ -598,6 +598,10 @@ type Options = {
 // during a backend restart so a temporarily stale options response is not
 // allowed to erase the user's font choices.
 const LOCAL_WINDOWS_FONTS: Record<string, string> = {
+  "just-me": "Just Me Again Down Here",
+  "instrument-serif": "Instrument Serif",
+  "jetbrains-mono": "JetBrains Mono",
+  gaegu: "Gaegu",
   cambria: "Cambria",
   consolas: "Consolas",
   "ink-free": "Ink Free",
