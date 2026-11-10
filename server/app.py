@@ -26,6 +26,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import mimetypes
 from subprocess import TimeoutExpired
@@ -597,6 +598,33 @@ def open_project_output(project_id: str, request: Request):
     except OSError as exc:
         raise HTTPException(500, f"Tidak dapat membuka folder: {exc}") from exc
     return {"ok": True}
+
+
+@app.post("/api/projects/{project_id}/clips/{clip_number}/open")
+def open_clip_output(project_id: str, clip_number: int, request: Request):
+    """Open Explorer at the rendered clip and select that exact MP4 file."""
+    require_local_browser(request)
+    p = projects.get(project_id)
+    if not p:
+        raise HTTPException(404, "project not found")
+    clip = next((item for item in p.clips if item.get("n") == clip_number), None)
+    if not clip or not isinstance(clip.get("video"), str):
+        raise HTTPException(404, "Clip belum tersedia")
+    name = Path(clip["video"]).name
+    if name != clip["video"]:
+        raise HTTPException(400, "Nama file clip tidak valid")
+    export = p.export_output_dir if p.export_output_dir and p.export_output_dir.is_dir() else None
+    output = export / name if export and (export / name).is_file() else p.dir / name
+    if not output.is_file():
+        raise HTTPException(404, "File clip tidak ditemukan")
+    if os.name != "nt":
+        raise HTTPException(501, "Buka folder hanya tersedia di Windows")
+    try:
+        # Separate arguments preserve spaces and commas in the selected filename.
+        subprocess.Popen(["explorer.exe", "/select,", str(output.resolve())])
+    except OSError as exc:
+        raise HTTPException(500, f"Tidak dapat membuka file clip: {exc}") from exc
+    return {"ok": True, "file": name}
 
 
 @app.post("/api/projects/{project_id}/source/open")
