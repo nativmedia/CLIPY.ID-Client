@@ -1,0 +1,77 @@
+name: Desktop smoke test
+
+on:
+  push:
+    branches: [main, "codex/client-desktop"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, macos-15, macos-15-intel, ubuntu-24.04]
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CLIPY_DESKTOP_SMOKE: "1"
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libwebkit2gtk-4.1-dev libssl-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev ffmpeg libgl1 libportaudio2 gstreamer1.0-libav gstreamer1.0-plugins-good xdg-utils xvfb xauth
+      - name: Install macOS FFmpeg
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg@7 portaudio
+          echo "$(brew --prefix ffmpeg@7)/bin" >> "$GITHUB_PATH"
+      - name: Install Windows FFmpeg
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+      - name: Install application dependencies
+        run: |
+          rustup update stable
+          rustup default stable
+          npm ci
+          npm run setup
+      - name: Build and test web client
+        run: |
+          npm run typecheck --workspace web
+          npm test --workspace web
+          npm run build --workspace web
+      - name: Open and close the desktop window
+        shell: pwsh
+        run: |
+          if ($IsLinux) {
+            xvfb-run -a npm run dev:desktop | Tee-Object -FilePath desktop.log
+          } else {
+            npm run dev:desktop | Tee-Object -FilePath desktop.log
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Select-String -LiteralPath desktop.log -SimpleMatch 'CLIPY_DESKTOP_WINDOW_READY')) {
+            throw 'The CLIPY.ID window did not finish loading.'
+          }
+          foreach ($port in 4757,4758) {
+            $client = [Net.Sockets.TcpClient]::new()
+            try {
+              try { $client.Connect('127.0.0.1', $port) } catch [Net.Sockets.SocketException] {}
+              if ($client.Connected) { throw "CLIPY.ID left port $port open." }
+            } finally {
+              $client.Dispose()
+            }
+          }

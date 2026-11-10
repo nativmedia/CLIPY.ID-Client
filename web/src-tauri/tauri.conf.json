@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CLIPY.ID",
+  "identifier": "id.clipy.client",
+  "build": {
+    "devUrl": "http://127.0.0.1:4757",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "CLIPY.ID",
+        "width": 1280,
+        "height": 850,
+        "minWidth": 720,
+        "minHeight": 560,
+        "backgroundColor": "#111214"
+      }
+    ]
+  },
+  "bundle": { "active": false, "icon": ["icons/icon.png", "icons/icon.ico"] }
+}

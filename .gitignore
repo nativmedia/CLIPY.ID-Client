@@ -1,3 +1,4 @@
+/node_modules/
 web/node_modules/
 web/dist/
 .venv/
@@ -16,3 +17,5 @@ __pycache__/
 /hyperframes-renderer/.thumbnails/
 /hyperframes-renderer/assets/
 /hyperframes-renderer/renders/
+/web/src-tauri/target/
+/web/src-tauri/gen/
