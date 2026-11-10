@@ -1,5 +1,4 @@
 fastapi>=0.115
-cryptography==50.0.2
 uvicorn>=0.32
 faster-whisper>=1.1
 yt-dlp>=2025.1.1

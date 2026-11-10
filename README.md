@@ -56,7 +56,7 @@ Semua platform memerlukan Git, Node.js 24 LTS dengan npm, Python 3.12, Rust stab
 | Sistem | Kebutuhan tambahan |
 | --- | --- |
 | Windows x64 | Microsoft C++ Build Tools dengan workload **Desktop development with C++** dan WebView2 Runtime. Untuk FFmpeg, gunakan **winget install --id Gyan.FFmpeg --exact**. |
-| macOS Apple Silicon dan Intel | Jalankan **xcode-select --install** untuk memasang Xcode Command Line Tools. Pasang Python dan FFmpeg melalui Homebrew dengan perintah di bawah. |
+| macOS 15 Apple Silicon dan Intel | Jalankan **xcode-select --install** untuk memasang Xcode Command Line Tools. Pasang Python dan FFmpeg melalui Homebrew dengan perintah di bawah. |
 | Linux x64 (Ubuntu 24.04) | Gunakan sesi desktop dengan WebKitGTK 4.1. Pasang paket di bawah dan Node.js 24 melalui pengelola versi atau metode instalasi Node.js pilihan Anda. |
 
 Detail toolchain tersedia di [panduan Tauri](https://v2.tauri.app/start/prerequisites/).
