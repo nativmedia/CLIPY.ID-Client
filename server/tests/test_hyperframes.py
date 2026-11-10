@@ -30,11 +30,12 @@ class HyperFramesTests(unittest.TestCase):
             self.assertNotIn("<", payload)
             self.assertEqual(json.loads(payload)["label"], "</script><script>alert(1)</script>")
 
-    def test_word_outline_is_saved_per_cue(self):
+    def test_font_weight_is_written_into_the_html_caption_layer(self):
         words = [captions.Word("Short", 0.1, 0.4)]
         with tempfile.TemporaryDirectory() as folder:
             source = hyperframes.caption_composition(Path(folder), words,
-                captions.CaptionStyle(animation="highlight", display="sentence", text_style="outline"),
+                captions.CaptionStyle(animation="highlight", display="sentence", font_weight="extra-bold"),
                 360, 640, 2).read_text(encoding="utf-8")
             payload = json.loads(re.search(r'id="overlay-config">(.*?)</script>', source, re.S)[1])
-            self.assertGreater(payload["cues"][0]["words"][0]["outline"], 0)
+            self.assertIn("font-weight:800", source)
+            self.assertEqual(payload["cues"][0]["words"][0]["outline"], 0)
