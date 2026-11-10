@@ -53,7 +53,6 @@ FONTS = {
     "jetbrains-mono": ("JetBrains Mono", "JetBrains Mono"),
     "gaegu": ("Gaegu", "Gaegu"),
     "cambria": ("Cambria", "Cambria"),
-    "consolas": ("Consolas", "Consolas"),
     "ink-free": ("Ink Free", "Ink Free"),
 }
 ANIMATIONS = {
@@ -79,7 +78,6 @@ FONT_FILES = {
     # These are Windows system fonts. CLIPY's local renderer uses the exact
     # installed files instead of a visually different bundled substitute.
     "cambria": Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "cambriab.ttf",
-    "consolas": Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "consola.ttf",
     "ink-free": Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "Inkfree.ttf",
 }
 FONT_DIR = Path(__file__).resolve().parent.parent / "fonts"
