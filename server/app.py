@@ -70,7 +70,7 @@ class ClipSettings(BaseModel):
 
 
 class CaptionSettings(BaseModel):
-    text_style: str = Field(default="plain", pattern="^(outline|plain|shadow|box)$")
+    font_weight: str = Field(default="regular", pattern="^(thin|regular|bold|extra-bold)$")
     font: str
     animation: str
     position: int | None = Field(default=None, ge=1, le=7)
