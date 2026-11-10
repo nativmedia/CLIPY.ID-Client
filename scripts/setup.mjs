@@ -1,7 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -45,7 +46,10 @@ function run(command, args) {
 async function installModel(name, url, sha256) {
   const directory = join(server, "models");
   const destination = join(directory, name);
-  if (await file(destination)) return;
+  if (await file(destination)) {
+    console.log("  Sudah tersedia · " + name);
+    return;
+  }
 
   await mkdir(directory, { recursive: true });
   const temporary = join(directory, ".download-" + randomUUID());
@@ -53,17 +57,42 @@ async function installModel(name, url, sha256) {
     console.log("Mengunduh " + name + "...");
     const response = await fetch(url, { signal: AbortSignal.timeout(120000) });
     if (!response.ok || !response.body) throw new Error("Unduhan gagal: HTTP " + response.status);
-    await writeFile(temporary, response.body, { flag: "wx" });
+    const total = Number(response.headers.get("content-length"));
+    const knownSize = total > 0 && !response.headers.get("content-encoding");
     const hash = createHash("sha256");
-    for await (const chunk of createReadStream(temporary)) hash.update(chunk);
+    let received = 0;
+    let lastUpdate = 0;
+    try {
+      await pipeline(response.body, async function* (chunks) {
+        for await (const chunk of chunks) {
+          hash.update(chunk);
+          received += chunk.length;
+          if (process.stdout.isTTY && Date.now() - lastUpdate >= 100) {
+            const percent = Math.min(99, Math.floor(received / total * 100));
+            const filled = Math.floor(percent / 5);
+            const progress = knownSize
+              ? "[" + "█".repeat(filled) + "░".repeat(20 - filled) + "] " + percent + "%"
+              : (received / 1048576).toFixed(2) + " MiB";
+            process.stdout.write("\r  " + progress);
+            lastUpdate = Date.now();
+          }
+          yield chunk;
+        }
+      }, createWriteStream(temporary, { flags: "wx" }));
+    } finally {
+      if (lastUpdate) process.stdout.write("\n");
+    }
     if (hash.digest("hex") !== sha256) throw new Error("Checksum model tidak cocok: " + name);
     await rename(temporary, destination);
+    console.log("  [████████████████████] 100% · " + (received / 1048576).toFixed(2) + " MiB · Terverifikasi");
   } finally {
     await rm(temporary, { force: true });
   }
 }
 
 try {
+  console.log("\nCLIPY.ID · Penyiapan desktop\n");
+  console.log("[1/3] Memeriksa FFmpeg dan Python");
   const filters = probe("ffmpeg", ["-hide_banner", "-filters"]);
   const encoders = probe("ffmpeg", ["-hide_banner", "-encoders"]);
   if (!/\bass\s+V->V\b/.test(filters.stdout ?? "") ||
@@ -84,7 +113,9 @@ try {
     run(command, [...args, "-m", "venv", venv]);
   }
 
+  console.log("\n[2/3] Memasang dependensi Python");
   run(python, ["-m", "pip", "install", "--disable-pip-version-check", "--prefer-binary", "-r", "requirements.txt"]);
+  console.log("\n[3/3] Menyiapkan model crop");
   for (const model of models) await installModel(...model);
   console.log("Dependensi CLIPY.ID siap.");
 } catch (error) {

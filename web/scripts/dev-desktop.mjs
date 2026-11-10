@@ -97,6 +97,7 @@ try {
   if (!options.ok || !(await options.json()).ratios?.includes("9:16")) {
     throw new Error("Tampilan CLIPY.ID tidak dapat terhubung ke server lokal.");
   }
+  console.log("Membangun dan membuka jendela CLIPY.ID...");
   desktop = start(process.execPath, [tauriCli, "dev", "--no-watch", "--", "--locked"], web);
   const result = await Promise.race([
     desktop.exited,
