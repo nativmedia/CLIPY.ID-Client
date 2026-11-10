@@ -4,6 +4,28 @@ CLIPY.ID adalah aplikasi web untuk membuat clip pendek atau rangkuman cerita dar
 
 Panduan ini menjelaskan cara memasang CLIPY.ID dari awal, termasuk jika Anda belum pernah memakai Git atau terminal. Ikuti urutannya dan jalankan perintah satu per satu.
 
+## Install di Windows
+
+Siapkan Git, Python 3.12, Node.js, dan FFmpeg sesuai bagian **Sebelum mulai**, lalu tempel perintah ini di PowerShell.
+
+```powershell
+irm https://raw.githubusercontent.com/nativmedia/CLIPY.ID-Client/main/install.ps1 | iex
+```
+
+Skrip mengambil kode sumber ke `%LOCALAPPDATA%\CLIPY.ID-Client`, memasang dependensi dan model crop, lalu membuka CLIPY.ID di browser. Biarkan terminal terbuka selama memakai aplikasi. Selesaikan pekerjaan video sebelum menekan **Ctrl+C**.
+
+### Clone dan jalankan dari kode sumber
+
+```powershell
+git clone https://github.com/nativmedia/CLIPY.ID-Client.git
+cd CLIPY.ID-Client
+powershell -NoProfile -ExecutionPolicy RemoteSigned -File .\start.ps1 -Install
+```
+
+Untuk membuka lagi dari folder repo, jalankan perintah yang sama tanpa `-Install`. Jika sudah memiliki clone, hentikan sesi lama, jalankan `git pull --ff-only`, lalu gunakan `-Install` untuk menyegarkan dependensi dan membuka aplikasi.
+
+Langkah manual tersedia di bawah jika Anda ingin menjalankan server dan tampilan di terminal terpisah.
+
 ## Sebelum mulai
 
 Siapkan komputer Windows 64-bit, koneksi internet, ruang penyimpanan yang cukup, dan API key dari penyedia AI yang didukung. Pemasangan dan pengunduhan model dapat memerlukan beberapa gigabyte dan waktu yang cukup lama.
