@@ -506,7 +506,7 @@ async function useLastSettings(source: LocalSource, action: HTMLButtonElement, s
     sel.font.value = s.caption.font;
     sel.animation.value = s.caption.animation === "word" ? "pop" : s.caption.animation;
     captionPosition.value = String(s.caption.position ?? 6);
-    captionTextStyle.value = s.caption.text_style ?? "plain";
+    captionWeight.value = s.caption.font_weight ?? "regular";
     captionMode.value = s.caption.display ?? (s.caption.animation === "word" ? "word" : "sentence");
     captionLines.value = String(s.caption.max_lines ?? 2);
     setThumbPosition(s.thumb.position ?? "bc");
@@ -770,11 +770,11 @@ const logoInput = $<HTMLInputElement>("#opt-logo");
 const logoPick = $<HTMLButtonElement>("#opt-logo-pick");
 const logoPreview = $<HTMLImageElement>("#opt-logo-preview");
 const captionPosition = $<HTMLSelectElement>("#opt-caption-position");
-const captionTextStyle = $<HTMLSelectElement>("#opt-caption-text-style");
+const captionWeight = $<HTMLSelectElement>("#opt-caption-weight");
 const syncPreviews = [
   previewSelect(sel.font, "font"),
   previewSelect(sel.animation, "animation"),
-  previewSelect(captionTextStyle, "text-style"),
+  previewSelect(captionWeight, "font-weight"),
   previewSelect(sel.titleStyle, "title-style"),
 ];
 const captionLines = $<HTMLSelectElement>("#opt-caption-lines");
@@ -1022,7 +1022,7 @@ function missingFields(): HTMLElement[] {
   const selects = filming
     ? [filmRatio, filmSourceRatio, filmBackground, filmDuration, filmVoice, filmStyle]
     : [sel.ratio, clipRatio, clipBackground, sel.duration, sel.count, sel.voice];
-  selects.push(sel.font, sel.animation, sel.case, captionMode, captionPosition, captionTextStyle,
+  selects.push(sel.font, sel.animation, sel.case, captionMode, captionPosition, captionWeight,
     sel.source);
   if (thumbTextMode.value !== "none") selects.push(sel.titleStyle);
   if (captionMode.value === "sentence") selects.push(captionLines);
@@ -1104,7 +1104,7 @@ document.querySelectorAll<HTMLButtonElement>("[data-step-input]").forEach((butto
 thumbText.addEventListener("input", progress);
 thumbTextMode.addEventListener("change", progress);
 [clipRatio, clipBackground, filmSourceRatio, filmBackground, filmEpisodes, filmDuration, filmVoice, filmRatio, filmStyle,
-  captionMode, captionPosition, captionTextStyle, captionLines, filmDubSpeed].forEach((field) => field.addEventListener("input", progress));
+  captionMode, captionPosition, captionWeight, captionLines, filmDubSpeed].forEach((field) => field.addEventListener("input", progress));
 filmRatio.addEventListener("change", shapeFrame);
 sel.ratio.addEventListener("change", shapeFrame);
 sel.source.addEventListener("change", () => {
@@ -1199,7 +1199,7 @@ function settings() {
       film: { episodes: Number(filmEpisodes.value), max_duration: Number(filmDuration.value), style: filmStyle.value, additional_prompt: filmPrompt.value.trim(), voice: filmVoice.value, source_ratio: filmSourceRatio.value, background: filmBackground.value },
       mood: "auto",
       clip: { ratio: filmRatio.value, fit: "crop", count: Number(filmEpisodes.value), max_duration: Number(filmDuration.value), dubbing_speed: Number(filmDubSpeed.value) },
-      caption: { font: sel.font.value, animation: sel.animation.value, color, case: sel.case.value, position: Number(captionPosition.value), display: captionMode.value, text_style: captionTextStyle.value, max_lines: Number(captionLines.value) },
+      caption: { font: sel.font.value, animation: sel.animation.value, color, case: sel.case.value, position: Number(captionPosition.value), display: captionMode.value, font_weight: captionWeight.value, max_lines: Number(captionLines.value) },
       thumb: { source: sel.source.value, title_style: thumbTextMode.value === "none" ? "none" : sel.titleStyle.value, text: thumbTextMode.value === "manual" ? thumbText.value.trim() : "", text_mode: thumbTextMode.value, sequence: thumbNumber.value, position: thumbPosition, voice: null },
       brand: { position: logoPosition, text: brandText.value.trim(), style: brandStyle.value || BRAND_DEFAULTS.style, opacity: Number(brandOpacity.value || BRAND_DEFAULTS.opacity) },
     };
@@ -1208,7 +1208,7 @@ function settings() {
     mood,
     music_start: musicStartWanted, music_length: musicWindowLength() || null,
     clip: { ratio: sel.ratio.value, fit: "crop", clip_ratio: clipRatio.value, background: clipBackground.value, count: Number(sel.count.value), max_duration: Number(sel.duration.value) },
-    caption: { font: sel.font.value, animation: sel.animation.value, color, case: sel.case.value, position: Number(captionPosition.value), display: captionMode.value, text_style: captionTextStyle.value, max_lines: Number(captionLines.value) },
+    caption: { font: sel.font.value, animation: sel.animation.value, color, case: sel.case.value, position: Number(captionPosition.value), display: captionMode.value, font_weight: captionWeight.value, max_lines: Number(captionLines.value) },
     thumb: {
       source: sel.source.value,
       title_style: thumbTextMode.value === "none" ? "none" : sel.titleStyle.value,
@@ -1302,7 +1302,7 @@ function resetAll(focus = true) {
   captionMode.value = "sentence";
   captionLines.value = "2";
   captionLinesPick.hidden = false;
-  captionTextStyle.value = "plain";
+  captionWeight.value = "regular";
   imagePick.hidden = true;
   imagePick.textContent = "choose image";
   musicInput.value = "";
@@ -1542,15 +1542,15 @@ refreshProjects();
 if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) input.focus();
 
 // Ready-made combinations inspired by popular short-form video treatments.
-const videoPresets: Record<string, {animation: string; color: string; display: string; textStyle: string; letterCase: string; title: string; font: string; description: string}> = {
-  viral: {animation: "highlight", color: "yellow", display: "sentence", textStyle: "outline", letterCase: "upper", title: "pop", font: "montserrat", description: "Teks tebal dengan sorotan kata aktif."},
-  podcast: {animation: "fade", color: "white", display: "sentence", textStyle: "shadow", letterCase: "sentence", title: "shadow", font: "poppins", description: "Caption tenang untuk percakapan dan wawancara."},
-  karaoke: {animation: "karaoke", color: "cyan", display: "sentence", textStyle: "outline", letterCase: "sentence", title: "underline", font: "montserrat", description: "Warna mengikuti kata yang diucapkan."},
-  box: {animation: "box", color: "yellow", display: "sentence", textStyle: "outline", letterCase: "upper", title: "box", font: "montserrat", description: "Kotak menonjolkan kata aktif."},
-  cinematic: {animation: "fade", color: "white", display: "sentence", textStyle: "shadow", letterCase: "sentence", title: "shadow", font: "montserrat", description: "Tampilan sederhana agar visual cerita tetap menonjol."},
-  edukasi: {animation: "reveal", color: "green", display: "sentence", textStyle: "outline", letterCase: "sentence", title: "bold", font: "poppins", description: "Tegas dan mudah dibaca untuk materi penjelasan."},
-  neon: {animation: "glow", color: "cyan", display: "word", textStyle: "shadow", letterCase: "upper", title: "stamp", font: "bangers", description: "Kontras cepat dengan aksen neon untuk momen energik."},
-  minimal: {animation: "fade", color: "white", display: "sentence", textStyle: "plain", letterCase: "sentence", title: "none", font: "poppins", description: "Caption ringan dengan tampilan visual yang paling bersih."},
+const videoPresets: Record<string, {animation: string; color: string; display: string; fontWeight: string; letterCase: string; title: string; font: string; description: string}> = {
+  viral: {animation: "highlight", color: "yellow", display: "sentence", fontWeight: "extra-bold", letterCase: "upper", title: "pop", font: "montserrat", description: "Teks tebal dengan sorotan kata aktif."},
+  podcast: {animation: "fade", color: "white", display: "sentence", fontWeight: "regular", letterCase: "sentence", title: "shadow", font: "poppins", description: "Caption tenang untuk percakapan dan wawancara."},
+  karaoke: {animation: "karaoke", color: "cyan", display: "sentence", fontWeight: "bold", letterCase: "sentence", title: "underline", font: "montserrat", description: "Warna mengikuti kata yang diucapkan."},
+  box: {animation: "box", color: "yellow", display: "sentence", fontWeight: "extra-bold", letterCase: "upper", title: "box", font: "montserrat", description: "Kotak menonjolkan kata aktif."},
+  cinematic: {animation: "fade", color: "white", display: "sentence", fontWeight: "regular", letterCase: "sentence", title: "shadow", font: "montserrat", description: "Tampilan sederhana agar visual cerita tetap menonjol."},
+  edukasi: {animation: "reveal", color: "green", display: "sentence", fontWeight: "bold", letterCase: "sentence", title: "bold", font: "poppins", description: "Tegas dan mudah dibaca untuk materi penjelasan."},
+  neon: {animation: "glow", color: "cyan", display: "word", fontWeight: "extra-bold", letterCase: "upper", title: "stamp", font: "bangers", description: "Kontras cepat dengan aksen neon untuk momen energik."},
+  minimal: {animation: "fade", color: "white", display: "sentence", fontWeight: "regular", letterCase: "sentence", title: "none", font: "poppins", description: "Caption ringan dengan tampilan visual yang paling bersih."},
 };
 const videoPreset = $<HTMLSelectElement>("#video-preset");
 videoPreset.addEventListener("change", () => {
@@ -1560,7 +1560,7 @@ videoPreset.addEventListener("change", () => {
   // Mood and all clip/filming settings above remain exactly as the user chose them.
   sel.font.value = preset.font; sel.animation.value = preset.animation; sel.case.value = preset.letterCase;
   captionMode.value = preset.display; captionLines.value = "2"; captionPosition.value = "5";
-  captionTextStyle.value = preset.textStyle; color = preset.color;
+  captionWeight.value = preset.fontWeight; color = preset.color;
   swatches.querySelectorAll<HTMLButtonElement>("button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.color === color)));
   sel.titleStyle.value = preset.title;
   if (!sel.source.value) sel.source.value = "auto";
@@ -1575,7 +1575,7 @@ function clearVideoPreset() {
   $<HTMLElement>("#preset-hint").textContent = "";
 }
 [sel.font, sel.animation, sel.case, captionMode,
- captionLines, captionPosition, captionTextStyle, sel.titleStyle].forEach(field => {
+ captionLines, captionPosition, captionWeight, sel.titleStyle].forEach(field => {
   field.addEventListener("input", clearVideoPreset);
   field.addEventListener("change", clearVideoPreset);
 });
