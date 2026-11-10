@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -51,6 +52,9 @@ FONTS = {
     "instrument-serif": ("Instrument Serif", "Instrument Serif"),
     "jetbrains-mono": ("JetBrains Mono", "JetBrains Mono"),
     "gaegu": ("Gaegu", "Gaegu"),
+    "cambria": ("Cambria", "Cambria"),
+    "consolas": ("Consolas", "Consolas"),
+    "ink-free": ("Ink Free", "Ink Free"),
 }
 ANIMATIONS = {
     "highlight": "Word highlight",
@@ -72,6 +76,11 @@ FONT_FILES = {
     "instrument-serif": "InstrumentSerif-Regular.ttf",
     "jetbrains-mono": "JetBrainsMono[wght].ttf",
     "gaegu": "Gaegu-Regular.ttf",
+    # These are Windows system fonts. CLIPY's local renderer uses the exact
+    # installed files instead of a visually different bundled substitute.
+    "cambria": Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "cambriab.ttf",
+    "consolas": Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "consola.ttf",
+    "ink-free": Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "Inkfree.ttf",
 }
 FONT_DIR = Path(__file__).resolve().parent.parent / "fonts"
 
