@@ -37,7 +37,7 @@ export type Project = {
     music_start?: number;
     music_length?: number | null;
     clip: { ratio: string; fit: string; count: number; max_duration: number; dubbing_speed?: number; clip_ratio?: string | null; background?: string | null };
-    caption: { font: string; animation: string; color: string; case: string; position?: number | null; display?: string | null; text_style?: string; max_lines?: number };
+    caption: { font: string; animation: string; color: string; case: string; position?: number | null; display?: string | null; font_weight?: string; max_lines?: number };
     thumb: { source: string; title_style: string; text?: string; text_mode?: "auto" | "manual" | "none"; numbered?: boolean; sequence?: string | null; position?: string | null; voice: string | null };
     brand?: { position: string; text?: string; style?: string; opacity?: number };
   };
