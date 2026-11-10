@@ -68,7 +68,7 @@ function ClipResult({ project, clip, onPreview, onRetry, onRefresh }: ResultsPro
   const openFolder = async () => {
     setOpeningFolder(true);
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/output/open`, { method: "POST" });
+      const response = await fetch(`/api/projects/${encodeURIComponent(project.id)}/clips/${clip.n}/open`, { method: "POST" });
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? `status ${response.status}`);
     } catch (error) {
       setRetryError(error instanceof Error ? error.message : String(error));
@@ -82,7 +82,7 @@ function ClipResult({ project, clip, onPreview, onRetry, onRefresh }: ResultsPro
     {clip.status === "error" && !running && project.status !== "cancelled" && <button type="button" className="text-button warn" title={clip.error ?? ""} disabled={retrying} onClick={retry}>{retrying ? "retrying…" : "retry"}</button>}
     {clip.status !== "error" && clip.video && <span className="clip-row-actions">
       <a className="clip-download" href={clip.video} download aria-label={`Unduh clip ${clip.n}`} title={`Unduh clip ${clip.n}`}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6.5 9.5 10 13l3.5-3.5M5 17h10" /></svg></a>
-      <button type="button" className="clip-open-folder" aria-label={`Buka folder clip ${clip.n}`} title="Buka folder clip" disabled={openingFolder} onClick={openFolder}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 14 14 6M8 6h6v6" /></svg></button>
+      <button type="button" className="clip-open-folder" aria-label={`Buka dan pilih file clip ${clip.n}`} title="Buka dan pilih file clip" disabled={openingFolder} onClick={openFolder}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 14 14 6M8 6h6v6" /></svg></button>
     </span>}
     {clip.status !== "error" && !clip.video && project.status !== "cancelled" && <span className="clip-status-icon" role="status" aria-label="Sedang memproses clip"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /></svg></span>}
     {clip.status === "error" && <span className="clip-error" role="status">{retryError || errorText || "Klip gagal diproses"}</span>}
