@@ -22,19 +22,28 @@ class CaptionAnimationTests(unittest.TestCase):
                 ass = captions.build_ass(words, captions.CaptionStyle(font=name), 360, 640)
                 self.assertIn(f"Style: Cap,{family},", ass)
 
-    def test_word_glow_keeps_sharp_glyphs_above_the_translucent_halo(self):
+    def test_word_glow_keeps_sharp_glyphs_above_the_translucent_halo_for_each_weight(self):
         words = [captions.Word("Paul", 0, .4)]
         for display in ("word", "sentence"):
-            for text_style in ("plain", "outline", "shadow", "box"):
-                with self.subTest(display=display, style=text_style):
-                    style = captions.CaptionStyle(display=display, animation="glow", text_style=text_style, color="white")
+            for font_weight, numeric_weight in captions.FONT_WEIGHTS.items():
+                with self.subTest(display=display, weight=font_weight):
+                    style = captions.CaptionStyle(display=display, animation="glow", font_weight=font_weight, color="white")
                     lines = captions.build_ass(words, style, 360, 640).splitlines()
                     halo = next(line for line in lines if r"\3a&H78&" in line)
                     sharp = next(line for line in lines if r"\blur0" in line)
+                    self.assertIn(rf"\b{numeric_weight}", halo)
                     self.assertIn(r"\1a&HFF&", halo)
                     self.assertNotIn(r"\1a&HFF&", sharp)
                     self.assertGreater(int(sharp[10]), int(halo[10]))
                     self.assertEqual(re.search(r"\\pos\([^)]*\)", halo)[0], re.search(r"\\pos\([^)]*\)", sharp)[0])
+
+    def test_font_weight_is_written_to_ass_style_and_word_tags(self):
+        words = [captions.Word("Halo", 0, .4)]
+        for name, numeric_weight in captions.FONT_WEIGHTS.items():
+            with self.subTest(weight=name):
+                ass = captions.build_ass(words, captions.CaptionStyle(font_weight=name), 360, 640)
+                self.assertIn(f",{numeric_weight},0,0,0,100,100,", ass)
+                self.assertIn(rf"\b{numeric_weight}", ass)
 
     def test_word_box_moves_between_words_while_glyph_anchors_stay_fixed(self):
         words = [captions.Word("Paul", 0, .4), captions.Word("berlari.", .4, .8)]
