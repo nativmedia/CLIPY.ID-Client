@@ -32,7 +32,7 @@ export function previewSelect(select: HTMLSelectElement, group: string) {
     const options = Array.from(select.options).filter((option) => !option.disabled && !option.hidden);
     if (!options.length) return;
     const buttons = options.map((option) => {
-      const styledName = group !== "font" && option.value !== "none";
+      const styledName = !["font", "font-weight"].includes(group) && option.value !== "none";
       const button = el("button", { type: "button", className: "option-preview" },
         styledName ? null : el("span", { textContent: option.text }),
         styledName ? el("img", { src: `/option-previews/${group}-${encodeURIComponent(option.value)}.webp`, alt: "", width: 160, height: 44 }) : null,
