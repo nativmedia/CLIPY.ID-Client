@@ -922,7 +922,9 @@ async function populateOptions() {
   fill(sel.ratio, o.ratios.map((r) => [r, r]));
   fill(sel.count, o.counts.map((n) => [String(n), `${n} clip${n > 1 ? "s" : ""}`]));
   fill(sel.duration, o.durations.map((d) => [String(d), `≤ ${d}s`]));
-  fill(sel.font, Object.entries(options.fonts));
+  fill(sel.font, Object.entries(options.fonts).sort(([, left], [, right]) =>
+    left.localeCompare(right, undefined, { sensitivity: "base" }),
+  ));
   syncCaptionWeightAvailability();
   fill(sel.animation, Object.entries(o.animations));
   if (animation === "word" && !("word" in o.animations) && "pop" in o.animations) {

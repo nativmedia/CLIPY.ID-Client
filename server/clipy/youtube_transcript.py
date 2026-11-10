@@ -14,9 +14,36 @@ from .captions import Word
 MAX_BYTES = 8 * 1024 * 1024
 
 
+def _token_key(token: str) -> str:
+    """Compare caption tokens without punctuation-only differences."""
+    return re.sub(r"^\W+|\W+$", "", token).casefold()
+
+
+def _rolling_overlap(previous: list[str], current: list[str]) -> int:
+    """Return the longest rolling-caption tail/prefix overlap."""
+    previous_keys = [_token_key(token) for token in previous]
+    current_keys = [_token_key(token) for token in current]
+    for size in range(min(len(previous_keys), len(current_keys)), 0, -1):
+        if previous_keys[-size:] == current_keys[:size]:
+            return size
+    return 0
+
+
+def _token_weight(token: str) -> int:
+    return max(1, len(_token_key(token)))
+
+
 def _merge_cues(cues: list[Word], duration: float) -> list[Word]:
-    """Keep readable phrases together when their timestamps overlap."""
+    """Flatten rolling caption windows without turning a whole video into one cue.
+
+    Auto-generated YouTube tracks commonly repeat the previous words in every
+    overlapping window.  Concatenating those windows makes caption timing drift
+    further behind the video with every event.  Keep only each new suffix and
+    place it inside the part of the current window where it is spoken.
+    """
     result = []
+    previous_tokens: list[str] = []
+    previous_end = -1.0
     for cue in sorted(cues, key=lambda cue: cue.start):
         start = min(max(0.0, cue.start), duration)
         end = min(max(start, cue.end), duration)
@@ -25,14 +52,23 @@ def _merge_cues(cues: list[Word], duration: float) -> list[Word]:
         if end <= start or not cue.text.strip():
             continue
         text = re.sub(r'\s+', ' ', cue.text).strip()
-        if result and start < result[-1].end:
-            previous = result[-1]
-            # Rolling captions sometimes repeat the previous phrase.
-            if text not in previous.text:
-                previous.text += ' ' + text
-            previous.end = max(previous.end, end)
-        else:
-            result.append(Word(text, start, end))
+        tokens = text.split()
+        overlap = _rolling_overlap(previous_tokens, tokens) if start <= previous_end + 0.08 else 0
+        fresh = tokens[overlap:]
+        if not fresh:
+            # A rolling window sometimes redraws exactly the same phrase. Keep
+            # the existing phrase visible for its refreshed end time.
+            if result and overlap:
+                result[-1].end = max(result[-1].end, end)
+            previous_tokens, previous_end = tokens, end
+            continue
+        if overlap:
+            total = sum(_token_weight(token) for token in tokens)
+            consumed = sum(_token_weight(token) for token in tokens[:overlap])
+            start += (end - start) * consumed / total
+            text = ' '.join(fresh)
+        result.append(Word(text, start, end))
+        previous_tokens, previous_end = tokens, end
     if not result:
         raise ValueError('subtitle tidak memiliki teks')
     return result

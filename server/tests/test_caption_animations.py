@@ -20,6 +20,15 @@ class CaptionAnimationTests(unittest.TestCase):
                 ass = captions.build_ass(words, captions.CaptionStyle(font=name), 360, 640)
                 self.assertIn(f"Style: Cap,{family},", ass)
 
+    def test_font_picker_is_alphabetical_and_scales_small_visible_faces(self):
+        labels = list(captions.OPTIONS["fonts"].values())
+        self.assertEqual(labels, sorted(labels, key=str.casefold))
+
+        words = [captions.Word("Caption terbaca", 0, 1)]
+        montserrat = captions._caption_cues(words, captions.CaptionStyle(font="montserrat", display="sentence"), 360, 640)[0]
+        gaegu = captions._caption_cues(words, captions.CaptionStyle(font="gaegu", display="sentence"), 360, 640)[0]
+        self.assertGreater(gaegu.size, montserrat.size)
+
     def test_word_glow_keeps_sharp_glyphs_above_the_translucent_halo_for_each_weight(self):
         words = [captions.Word("Paul", 0, .4)]
         for display in ("word", "sentence"):

@@ -70,17 +70,18 @@ class CaptionStyle:
     max_lines: int = 2
 
 
-# Family names as libass sees them (the TTFs live in server/fonts).
+# Family names as libass sees them (the TTFs live in server/fonts).  Keep this
+# display order alphabetical as the API order is also the fallback picker order.
 FONTS = {
-    "montserrat": ("Montserrat", "Montserrat"),
     "anton": ("Anton", "Anton"),
-    "bebas": ("Bebas Neue", "Bebas Neue"),
-    "poppins": ("Poppins", "Poppins"),
     "bangers": ("Bangers", "Bangers"),
-    "just-me": ("Just Me Again Down Here", "Just Me Again Down Here"),
+    "bebas": ("Bebas Neue", "Bebas Neue"),
+    "gaegu": ("Gaegu", "Gaegu"),
     "instrument-serif": ("Instrument Serif", "Instrument Serif"),
     "jetbrains-mono": ("JetBrains Mono", "JetBrains Mono"),
-    "gaegu": ("Gaegu", "Gaegu"),
+    "just-me": ("Just Me Again Down Here", "Just Me Again Down Here"),
+    "montserrat": ("Montserrat", "Montserrat"),
+    "poppins": ("Poppins", "Poppins"),
 }
 ANIMATIONS = {
     "highlight": "Word highlight",
@@ -104,6 +105,16 @@ FONT_FILES = {
     "gaegu": "Gaegu-Regular.ttf",
 }
 FONT_DIR = Path(__file__).resolve().parent.parent / "fonts"
+
+# libass sizes fonts against each font's Windows line box.  A few otherwise
+# legible faces have a much smaller visible cap-height in that box, notably
+# Gaegu.  Only lift undersized faces; do not shrink a font the user selected.
+CAPTION_SIZE_SCALES = {
+    "bebas": 1.20,
+    "gaegu": 1.60,
+    "instrument-serif": 1.15,
+    "jetbrains-mono": 1.14,
+}
 
 
 @lru_cache(maxsize=96)
@@ -133,7 +144,7 @@ COLORS = {
 CASES = {"upper": "UPPERCASE", "lower": "lowercase", "title": "Title Case", "sentence": "Sentence case"}
 
 OPTIONS = {
-    "fonts": {k: v[0] for k, v in FONTS.items()},
+    "fonts": dict(sorted(((k, v[0]) for k, v in FONTS.items()), key=lambda item: item[1].casefold())),
     "font_weight_fonts": sorted(FONT_WEIGHT_FONTS),
     "animations": ANIMATIONS,
     "colors": COLORS,
@@ -194,14 +205,28 @@ def chunk_words(words: list[Word], max_words: int = 3, max_chars: int = 15, *, s
     return chunks
 
 
+_VOWEL_GROUPS = re.compile(r"[aeiouy]+", re.IGNORECASE)
+COARSE_WORD_LEAD = 0.16
+
+
+def _spoken_weight(token: str) -> float:
+    """Estimate spoken duration from syllables, not raw character count."""
+    letters = re.sub(r"[^A-Za-zÀ-ÖØ-öø-ÿ]", "", token)
+    syllables = len(_VOWEL_GROUPS.findall(letters))
+    # Acronyms/numbers still take time to say.  A tiny length component keeps
+    # unusually long words from being rushed without delaying every later cue.
+    return max(1.0, min(4.5, syllables + max(0, len(letters) - 4) * 0.06))
+
+
 def expand_coarse_words(words: list[Word]) -> list[Word]:
     """Split cue-level subtitle timing into readable, approximately timed words.
 
     YouTube's fallback captions sometimes provide a whole spoken passage as one
     ``Word``.  Caption rendering, clipping, and framing all need word-sized
-    entries, so distribute that cue's duration by token length.  Real
-    word-timed transcripts contain one token per entry and pass through
-    unchanged.
+    entries, so distribute that cue's duration by spoken-syllable weight. A
+    short, per-word anticipation makes the visual highlight feel aligned with
+    speech without applying one global offset. Real word-timed transcripts
+    contain one token per entry and pass through unchanged.
     """
     expanded: list[Word] = []
     for word in words:
@@ -209,14 +234,21 @@ def expand_coarse_words(words: list[Word]) -> list[Word]:
         if len(tokens) < 2 or word.end <= word.start:
             expanded.append(word)
             continue
-        weights = [max(1, len(token)) for token in tokens]
+        weights = [_spoken_weight(token) for token in tokens]
         total = sum(weights)
         elapsed = 0
+        previous_start = word.start
         for index, (token, weight) in enumerate(zip(tokens, weights)):
-            start = word.start + (word.end - word.start) * elapsed / total
+            raw_start = word.start + (word.end - word.start) * elapsed / total
             elapsed += weight
             end = word.end if index == len(tokens) - 1 else word.start + (word.end - word.start) * elapsed / total
+            # Segment tracks do not expose the true onset of each token. Lead
+            # only later words by a fraction of their own estimated duration,
+            # so the active word does not visibly trail the speaker.
+            lead = 0 if index == 0 else min(COARSE_WORD_LEAD, (end - raw_start) * 0.4)
+            start = max(word.start, previous_start, raw_start - lead)
             expanded.append(Word(token, start, end))
+            previous_start = start
     return expanded
 
 
@@ -282,7 +314,8 @@ def _caption_cues(words: list[Word], style: CaptionStyle, width: int, height: in
     sentence = style.display == "sentence"
     font_name = style.font if style.font in FONTS else "montserrat"
     weight = style.font_weight if font_name in FONT_WEIGHT_FONTS else "regular"
-    size = max(1, round(layout.font_size * (1.12 if single else 0.63 if sentence else 1)))
+    mode_scale = 1.12 if single else 0.63 if sentence else 1
+    size = max(1, round(layout.font_size * mode_scale * CAPTION_SIZE_SCALES.get(font_name, 1)))
     font = _font(font_name, size, weight)
     limit = width * 0.86
     max_lines = style.max_lines if sentence else 1

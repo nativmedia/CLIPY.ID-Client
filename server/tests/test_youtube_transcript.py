@@ -36,14 +36,27 @@ class YouTubeTranscriptTests(unittest.TestCase):
         self.assertGreaterEqual(end, 2)
         self.assertLessEqual(end, 2.5)
 
-    def test_overlapping_sentence_cues_remain_available_as_one_segment(self):
+    def test_overlapping_sentence_cues_remain_separate_for_precise_caption_timing(self):
         data = payload([{'tStartMs': 1000, 'dDurationMs': 2000, 'segs': [{'utf8': 'Halo dunia.'}]},
                         {'tStartMs': 2500, 'dDurationMs': 1000, 'segs': [{'utf8': 'Apa kabar?'}]}])
         words, precision = youtube_transcript.parse_json3(data, 10)
         self.assertEqual(precision, 'segmen')
-        self.assertEqual(len(words), 1)
-        self.assertIn('Halo dunia.', words[0].text)
-        self.assertIn('Apa kabar?', words[0].text)
+        self.assertEqual([word.text for word in words], ['Halo dunia.', 'Apa kabar?'])
+
+    def test_rolling_cues_keep_only_new_words_instead_of_accumulating_one_long_segment(self):
+        data = payload([
+            {'tStartMs': 1000, 'dDurationMs': 2000, 'segs': [{'utf8': 'Kita mulai'}]},
+            {'tStartMs': 2500, 'dDurationMs': 2000, 'segs': [{'utf8': 'Kita mulai sekarang'}]},
+            {'tStartMs': 4000, 'dDurationMs': 2000, 'segs': [{'utf8': 'sekarang ya'}]},
+        ])
+        words, precision = youtube_transcript.parse_json3(data, 10)
+
+        self.assertEqual(precision, 'segmen')
+        self.assertEqual([word.text for word in words], ['Kita mulai', 'sekarang', 'ya'])
+        self.assertEqual((words[0].start, words[0].end), (1, 3))
+        self.assertGreater(words[1].start, 3.5)
+        self.assertGreater(words[2].start, 5.5)
+        self.assertEqual(words[-1].end, 6)
 
     def test_vtt_sentence_track_is_accepted(self):
         data = b'WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nHello world.\n'
