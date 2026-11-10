@@ -603,7 +603,6 @@ const LOCAL_WINDOWS_FONTS: Record<string, string> = {
   "jetbrains-mono": "JetBrains Mono",
   gaegu: "Gaegu",
   cambria: "Cambria",
-  consolas: "Consolas",
   "ink-free": "Ink Free",
 };
 
