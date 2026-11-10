@@ -79,6 +79,17 @@ sudo apt install git curl build-essential python3.12 python3.12-venv ffmpeg \
 
 - Antarmuka Vite berjalan di dalam jendela Tauri. Peluncur menyalakan API FastAPI secara lokal dan menghentikannya saat jendela ditutup.
 - Masukkan API key dari penyedia yang didukung melalui aplikasi. Transkripsi lokal pertama bisa mengunduh model Whisper sekitar 3 GB.
-- Proyek, pengaturan, dan hasil lokal tersimpan di **server/data**. Jika memakai clone lama, ambil perubahan dengan **git pull --ff-only**, lalu ulangi **npm ci** dan **npm run setup**.
+- Proyek, pengaturan, dan hasil lokal tersimpan di **server/data**.
+
+## Memperbarui aplikasi
+
+`npm run dev:desktop` memakai kode di folder lokal. Untuk mengambil versi terbaru, tutup aplikasi dan jalankan perintah berikut dari folder repo.
+
+```sh
+git pull --ff-only
+npm run dev:desktop
+```
+
+Jika dependensi ikut berubah, jalankan `npm ci` dan `npm run setup` setelah `git pull`, lalu buka aplikasi. Jika memakai perintah instalasi satu baris di atas, jalankan ulang perintah tersebut untuk mengambil pembaruan dan menyiapkan dependensi.
 
 [Panduan mode web, pengaturan, dan pemecahan masalah](docs/web.md)
