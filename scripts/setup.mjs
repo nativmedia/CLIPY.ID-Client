@@ -84,7 +84,7 @@ try {
     run(command, [...args, "-m", "venv", venv]);
   }
 
-  run(python, ["-m", "pip", "install", "--disable-pip-version-check", "-r", "requirements.txt"]);
+  run(python, ["-m", "pip", "install", "--disable-pip-version-check", "--prefer-binary", "-r", "requirements.txt"]);
   for (const model of models) await installModel(...model);
   console.log("Dependensi CLIPY.ID siap.");
 } catch (error) {
