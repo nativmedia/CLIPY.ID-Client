@@ -101,7 +101,7 @@ MOODS = {
 
 def pick_clips(words: list[Word], count: int, max_duration: float, language: str | None,
                exclude: list[tuple[float, float]] | None = None, mood: str = "auto",
-               allow_approximate: bool = False, on_approximate=None) -> list[Pick]:
+               allow_approximate: bool = False, on_approximate=None, objective: str = "") -> list[Pick]:
     """
     `exclude` holds stretches already clipped in earlier projects of this video: the new clips
     must be different moments, so they may not overlap any of them.
@@ -120,11 +120,13 @@ def pick_clips(words: list[Word], count: int, max_duration: float, language: str
             f"This video was clipped before. These stretches (seconds) are already used, so every "
             f"new clip must be a different moment that does not overlap any of them: {spans}.\n"
         )
+    objective_note = f"User objective for clip selection: {objective.strip()}\n" if objective.strip() else ""
     user = (
         f"Video length: {total:.0f} seconds. Language: {language or 'unknown'}.\n"
         f"Mood preference: {mood.upper()}. {MOODS[mood]} "
         "Use only evidence in the transcript; do not invent emotions, events or misleading titles.\n"
         f"{taken_note}"
+        f"{objective_note}"
         f"Pick up to {count} clips. Each clip should run about {target:.0f} seconds: at least "
         f"{shortest:.0f} and never more than {max_duration:.0f}. Choose the end time where that "
         f"conversation is really finished, not where the first funny line lands.\n\n"

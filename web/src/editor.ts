@@ -34,6 +34,7 @@ export type Project = {
     mode?: string;
     film?: { episodes: number; max_duration: number; style: string; voice: string; source_ratio?: string; background?: string; additional_prompt?: string } | null;
     mood?: string;
+    objective?: string;
     music_start?: number;
     music_length?: number | null;
     clip: { ratio: string; fit: string; count: number; max_duration: number; dubbing_speed?: number; clip_ratio?: string | null; background?: string | null };
@@ -551,14 +552,37 @@ function followUntilDone(id: string, routeId = editing) {
   }, 2000);
 }
 
+export function openYoutubeInBrowser(control: HTMLElement, url: string, event?: MouseEvent): void {
+  if (window.location.origin !== "http://127.0.0.1:4757") return;
+  if (!event) {
+    control.addEventListener("click", click => openYoutubeInBrowser(control, url, click));
+    return;
+  }
+  event.preventDefault();
+  void fetch("/api/source/open-youtube", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  }).then(response => {
+    if (!response.ok) throw new Error("Browser default tidak dapat dibuka.");
+  }).catch(error => { control.title = error.message; });
+}
+
+function youtubeLink(url: string, content: HTMLElement | string, label: string): HTMLElement | string {
+  if (!url) return content;
+  const link = el("a", { href: url, target: "_blank", rel: "noopener noreferrer", ariaLabel: label }, content);
+  openYoutubeInBrowser(link, url);
+  return link;
+}
+
 /** One project section, kept in the same order as the Project Result list. */
 function dashboardProject(p: Project, routeId: string, selected: boolean): HTMLElement {
   const grid = el("ol", { className: "editor-clips" });
   const row = el("div", { className: "editor-row" }, grid);
   const section = el("section", { className: `editor-project${selected ? " is-target" : ""}` },
     el("div", { className: "editor-intro" },
-      el("img", { className: "editor-thumb", src: p.thumbnail, alt: "" }),
-      el("div", {}, el("div", { className: "editor-title-row" }, el("h2", { textContent: p.title || p.url }), ...titleActions(p)),
+      youtubeLink(p.url, el("img", { className: "editor-thumb", src: p.thumbnail, alt: "" }), "Buka video sumber di YouTube"),
+      el("div", {}, el("div", { className: "editor-title-row" }, el("h2", {}, youtubeLink(p.url, p.title || p.url, p.title || "Buka video sumber di YouTube")), ...titleActions(p)),
         el("p", { className: "editor-meta", textContent: `${clipLayout(p.settings)} · ${p.clips.filter((c) => c.status === "done").length}/${p.clips.length} clips` }))),
     scrollButtons(grid, row), row);
   section.dataset.projectId = p.id;

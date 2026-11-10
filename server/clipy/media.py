@@ -21,11 +21,12 @@ FONTS_DIR = Path(__file__).resolve().parent.parent / "fonts"
 
 # Output frame per aspect ratio.
 RATIOS = {
-    "9:16": (1080, 1920),
     "16:9": (1920, 1080),
+    "4:3": (1440, 1080),
     "1:1": (1080, 1080),
     "4:5": (1080, 1350),
-    "5:4": (1350, 1080),
+    "9:16": (1080, 1920),
+    "5:4": (1350, 1080),  # Previously saved projects.
 }
 FITS = {"crop": "Crop to fill", "fit": "Fit (blurred background)"}
 

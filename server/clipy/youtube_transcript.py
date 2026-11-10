@@ -14,6 +14,13 @@ from .captions import Word
 MAX_BYTES = 8 * 1024 * 1024
 
 
+BRACKETED_CUE = re.compile(r"\[[^\[\]]*\]")
+
+
+def _without_cues(text: str) -> str:
+    return BRACKETED_CUE.sub(lambda match: " " * len(match[0]), text)
+
+
 def _token_key(token: str) -> str:
     """Compare caption tokens without punctuation-only differences."""
     return re.sub(r"^\W+|\W+$", "", token).casefold()
@@ -51,7 +58,9 @@ def _merge_cues(cues: list[Word], duration: float) -> list[Word]:
             end = duration
         if end <= start or not cue.text.strip():
             continue
-        text = re.sub(r'\s+', ' ', cue.text).strip()
+        text = re.sub(r'\s+', ' ', _without_cues(cue.text)).strip()
+        if not text:
+            continue
         tokens = text.split()
         overlap = _rolling_overlap(previous_tokens, tokens) if start <= previous_end + 0.08 else 0
         fresh = tokens[overlap:]
@@ -117,7 +126,15 @@ def parse_json3(data: bytes, duration: float) -> tuple[list[Word], str]:
     word_timing = True
     for event in events:
         segs = event.get('segs') or []
-        nonempty = [s for s in segs if str(s.get('utf8', '')).strip()]
+        segment_texts = [str(seg.get('utf8', '')) for seg in segs]
+        cleaned = _without_cues(''.join(segment_texts))
+        nonempty = []
+        offset = 0
+        for seg, text in zip(segs, segment_texts):
+            part = cleaned[offset:offset + len(text)]
+            offset += len(text)
+            if part.strip():
+                nonempty.append({**seg, 'utf8': part})
         if not nonempty:
             continue
         try:

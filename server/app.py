@@ -28,6 +28,7 @@ import re
 import shutil
 import subprocess
 import sys
+import webbrowser
 import tempfile
 import mimetypes
 from subprocess import TimeoutExpired
@@ -124,6 +125,7 @@ class Settings(BaseModel):
     film: FilmSettings | None = None
     music_start: float = Field(default=0, ge=0, le=14400)
     music_length: float | None = Field(default=None, gt=0, le=180)
+    objective: str = Field(default="", max_length=2000)
     mood: str = Field(default="auto", pattern="^(auto|senang|sedih|lucu|serius|seram|informatif|inspiratif|konyol)$")
     clip: ClipSettings
     caption: CaptionSettings
@@ -185,6 +187,21 @@ def open_local_path(path: Path, *, reveal: bool = False) -> None:
         subprocess.Popen(["xdg-open", str(path.parent if reveal else path)])
 
 
+class YoutubeSourceRequest(BaseModel):
+    url: str = Field(max_length=2048)
+
+
+@app.post("/api/source/open-youtube")
+def open_youtube_source(payload: YoutubeSourceRequest, request: Request):
+    require_local_browser(request)
+    video_id = youtube_id(payload.url)
+    if not video_id:
+        raise HTTPException(400, "URL YouTube tidak valid")
+    if not webbrowser.open_new_tab(f"https://www.youtube.com/watch?v={video_id}"):
+        raise HTTPException(500, "Browser default tidak dapat dibuka")
+    return {"ok": True}
+
+
 # ---------- key ----------
 
 class KeyRequest(BaseModel):
@@ -215,7 +232,7 @@ def delete_key():
 @app.get("/api/options")
 def options():
     return {
-        "ratios": list(media.RATIOS),
+        "ratios": [ratio for ratio in media.RATIOS if ratio != "5:4"],
         "fits": media.FITS,
         "counts": COUNTS,
         "durations": DURATIONS,

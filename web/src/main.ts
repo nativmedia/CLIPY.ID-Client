@@ -1,5 +1,5 @@
 import { Marquee } from "./marquee";
-import { el, openEditor, openPreview, retryClip, type Project } from "./editor";
+import { el, openEditor, openPreview, openYoutubeInBrowser, retryClip, type Project } from "./editor";
 import { disposeProjectIslands, mountClipResults, mountProjectSettings } from "./project-components";
 import { filmConcatControls } from "./film-concat";
 import { previewSelect } from "./option-preview";
@@ -32,7 +32,8 @@ const button = $<HTMLButtonElement>("#clip");
 const hint = $<HTMLParagraphElement>("#hint");
 const preview = $<HTMLDivElement>("#preview");
 const thumb = $<HTMLImageElement>("#thumb");
-const title = $<HTMLElement>("#title");
+const title = $<HTMLAnchorElement>("#title-source");
+const sourceLinks = [$<HTMLAnchorElement>("#thumb-source"), title];
 
 const HINT = "paste link here";
 
@@ -147,6 +148,8 @@ function clear() {
   upload = null;
   if (current?.kind === "file" && current.objectUrl.startsWith("blob:")) URL.revokeObjectURL(current.objectUrl);
   current = null;
+  for (const link of sourceLinks) link.removeAttribute("href");
+  title.parentElement!.classList.remove("loading");
   startButton.setAttribute("aria-disabled", "true");
   if (showMissingFields) setHint(startHint, "");
   showMissingFields = false;
@@ -158,25 +161,32 @@ function clear() {
   preview.classList.remove("show");
 }
 
+for (const link of sourceLinks) {
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.addEventListener("click", (event) => {
+    if (current?.kind === "youtube") openYoutubeInBrowser(link, current.url, event);
+  });
+}
+
 function showPlatform(kind: Source["kind"]) {
+  const url = current?.kind === "youtube" ? current.url : "";
+  for (const link of sourceLinks) {
+    if (url) link.href = url;
+    else link.removeAttribute("href");
+  }
   $<HTMLElement>("#platform-youtube").hidden = kind !== "youtube";
   $<HTMLElement>("#platform-file").hidden = kind !== "file";
 }
 
-// The thumbnail plays the source in place: YouTube's own player, or the local file.
+// YouTube opens externally. Local video still plays in the preview.
 play.addEventListener("click", () => {
   if (!current) return;
-  let media: HTMLElement;
   if (current.kind === "youtube") {
-    media = el("iframe", {
-      src: `https://www.youtube-nocookie.com/embed/${current.id}?autoplay=1&rel=0`,
-      allow: "autoplay; encrypted-media; picture-in-picture; fullscreen",
-      title: current.title,
-    });
-    media.setAttribute("allowfullscreen", "");
-  } else {
-    media = el("video", { src: current.objectUrl, controls: true, autoplay: true, playsInline: true });
+    $<HTMLAnchorElement>("#thumb-source").click();
+    return;
   }
+  const media = el("video", { src: current.objectUrl, controls: true, autoplay: true, playsInline: true });
   player.replaceChildren(media);
   player.hidden = false;
   play.hidden = true;
@@ -197,7 +207,7 @@ async function show(id: string) {
   thumb.dataset.fallback = "";
   thumb.src = `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`;
   title.textContent = "";
-  title.classList.add("loading");
+  title.parentElement!.classList.add("loading");
   preview.classList.add("show");
 
   try {
@@ -209,7 +219,7 @@ async function show(id: string) {
     if (current?.id !== id) return;
     current.title = data.title;
     title.textContent = data.title;
-    title.classList.remove("loading");
+    title.parentElement!.classList.remove("loading");
     button.disabled = !ready();
     progress();
   } catch (err) {
@@ -263,7 +273,7 @@ async function showFile(file: File) {
   showPlatform("file");
   thumb.classList.remove("loaded");
   title.textContent = source.title;
-  title.classList.remove("loading");
+  title.parentElement!.classList.remove("loading");
   preview.classList.add("show");
   frameOf(objectUrl).then((src) => current === source && (thumb.src = src)).catch(() => {});
 
@@ -323,7 +333,7 @@ async function pickServerFile() {
     thumb.classList.remove("loaded");
     thumb.src = `/api/uploads/${encodeURIComponent(data.id)}/poster`;
     title.textContent = source.title;
-    title.classList.remove("loading");
+    title.parentElement!.classList.remove("loading");
     preview.classList.add("show");
     setHint(hint, "file server siap · tanpa upload");
     button.disabled = !ready();
@@ -383,7 +393,7 @@ function useSource(s: LocalSource) {
     thumb.dataset.fallback = "";
     thumb.src = s.thumbnail;
     title.textContent = s.title;
-    title.classList.remove("loading");
+    title.parentElement!.classList.remove("loading");
     preview.classList.add("show");
     button.disabled = !ready();
   } else {
@@ -394,7 +404,7 @@ function useSource(s: LocalSource) {
     thumb.classList.remove("loaded");
     thumb.src = s.thumbnail;
     title.textContent = s.title;
-    title.classList.remove("loading");
+    title.parentElement!.classList.remove("loading");
     preview.classList.add("show");
     button.disabled = !ready();
   }
@@ -487,8 +497,7 @@ async function useLastSettings(source: LocalSource, action: HTMLButtonElement, s
     const savedSpeed = (s.clip.dubbing_speed ?? 1).toFixed(1);
     if (savedMode === "filming") filmDubSpeed.value = savedSpeed;
     if (s.mode === "filming" && s.film) {
-      filmRatio.value = s.clip.ratio;
-      setFilmCrop(s.film.source_ratio ?? "auto");
+      restoreRatio(filmRatio, s.clip.ratio);
       filmBackground.value = s.film.background ?? "black";
       filmEpisodes.value = String(s.film.episodes);
       filmDuration.value = String(s.film.max_duration);
@@ -497,17 +506,18 @@ async function useLastSettings(source: LocalSource, action: HTMLButtonElement, s
       filmStyle.value = s.film.style;
       filmPrompt.value = s.film.additional_prompt ?? "";
     }
-    setMood(s.mood ?? "auto");
-    sel.ratio.value = s.clip.ratio;
-    setClipCrop(s.clip.clip_ratio ?? (s.clip.fit === "crop" ? "auto" : "none"));
+    clipObjective.value = s.objective ?? "";
+    savedClipCrop = s.clip.clip_ratio ?? (s.clip.fit === "crop" ? "auto" : "none");
+    savedFilmCrop = s.film?.source_ratio ?? "auto";
+    restoreRatio(sel.ratio, s.clip.ratio);
     clipBackground.value = s.clip.background ?? "black";
     sel.count.value = String(s.clip.count);
     sel.duration.value = String(s.clip.max_duration);
     sel.font.value = s.caption.font;
-    sel.animation.value = s.caption.animation === "word" ? "pop" : s.caption.animation;
     captionPosition.value = String(s.caption.position ?? 6);
     captionWeight.value = s.caption.font_weight ?? "regular";
     captionMode.value = s.caption.display ?? (s.caption.animation === "word" ? "word" : "sentence");
+    fillAnimations(s.caption.animation === "word" ? "pop" : s.caption.animation, true);
     captionLines.value = String(s.caption.max_lines ?? 2);
     setThumbPosition(s.thumb.position ?? "bc");
     sel.case.value = s.caption.case;
@@ -609,7 +619,7 @@ type KeyState = { set: boolean; label?: string; masked?: string };
 
 const steps = {
   film: $<HTMLDivElement>("#step-film"),
-  mood: $<HTMLDivElement>("#step-mood"),
+  objective: $<HTMLDivElement>("#step-objective"),
   key: $<HTMLDivElement>("#step-key"),
   clip: $<HTMLDivElement>("#step-clip"),
   caption: $<HTMLDivElement>("#step-caption"),
@@ -829,31 +839,33 @@ let starting = false;
 let showMissingFields = false;
 const markedFields = new Set<HTMLElement>();
 let apiKeyReady = false;
-let mood = "auto";
 let mode: "clipping" | "filming" = "clipping";
-const clipRatio = $<HTMLSelectElement>("#opt-clip-ratio");
+let savedClipCrop = "auto";
+let savedFilmCrop = "auto";
 const clipBackground = $<HTMLSelectElement>("#opt-background");
-// Older projects may use a crop that is no longer offered for new projects.
-function setClipCrop(value: string) {
-  clipRatio.querySelectorAll('option[data-legacy]').forEach(option => option.remove());
-  if (![...clipRatio.options].some(option => option.value === value)) {
-    const option = new Option(value === "auto" ? "auto (output ratio) (tersimpan)" : `${value} (tersimpan)`, value);
+const clipObjective = $<HTMLTextAreaElement>("#clip-objective");
+const outputRatios = ["16:9", "4:3", "1:1", "4:5", "9:16"];
+
+function restoreRatio(select: HTMLSelectElement, value: string) {
+  select.querySelector("option[data-legacy]")?.remove();
+  if (!outputRatios.includes(value)) {
+    const option = new Option(value + " (tersimpan)", value);
     option.hidden = true;
     option.dataset.legacy = "true";
-    clipRatio.add(option);
+    select.add(option);
   }
-  clipRatio.value = value;
+  select.value = value;
 }
-const filmSourceRatio = $<HTMLSelectElement>("#film-source-ratio");
-function setFilmCrop(value: string) {
-  filmSourceRatio.querySelectorAll('option[data-legacy]').forEach(option => option.remove());
-  if (![...filmSourceRatio.options].some(option => option.value === value)) {
-    const option = new Option(value === "auto" ? "auto (output ratio) (tersimpan)" : `${value} (tersimpan)`, value);
-    option.hidden = true;
-    option.dataset.legacy = "true";
-    filmSourceRatio.add(option);
-  }
-  filmSourceRatio.value = value;
+
+function fillAnimations(preferred = sel.animation.value, restore = false) {
+  if (!options) return;
+  const perWord = captionMode.value === "word";
+  const entries = Object.entries(options.animations).filter(([key]) => key.startsWith("word-") === perWord);
+  const legacy = options.animations[preferred];
+  if (restore && legacy && !entries.some(([key]) => key === preferred)) entries.push([preferred, legacy + " (tersimpan)"]);
+  fill(sel.animation, entries);
+  sel.animation.value = entries.some(([key]) => key === preferred) ? preferred : (entries[0]?.[0] ?? "");
+  $("#caption-animation-label").textContent = perWord ? "animasi per kata" : "animasi per kalimat";
 }
 const filmBackground = $<HTMLSelectElement>("#film-background");
 const filmDubSpeed = $<HTMLInputElement>("#film-dub-speed");
@@ -863,31 +875,6 @@ const filmVoice = $<HTMLSelectElement>("#film-voice");
 const filmRatio = $<HTMLSelectElement>("#film-ratio");
 const filmStyle = $<HTMLSelectElement>("#film-style");
 const filmPrompt = $<HTMLInputElement>("#film-prompt");
-const moodOptions = $<HTMLDivElement>("#opt-mood");
-function setMood(value: string) {
-  const buttons = [...moodOptions.querySelectorAll<HTMLButtonElement>("button")];
-  mood = buttons.some((b) => b.dataset.mood === value) ? value : "auto";
-  buttons.forEach((b) => {
-    b.setAttribute("aria-checked", String(b.dataset.mood === mood));
-    b.tabIndex = b.dataset.mood === mood ? 0 : -1;
-  });
-}
-moodOptions.addEventListener("click", (event) => {
-  const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[data-mood]");
-  if (button) setMood(button.dataset.mood!);
-});
-moodOptions.addEventListener("keydown", (event) => {
-  if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"].includes(event.key)) return;
-  event.preventDefault();
-  const buttons = [...moodOptions.querySelectorAll<HTMLButtonElement>("button")];
-  const current = buttons.findIndex((b) => b.dataset.mood === mood);
-  const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 :
-    (current + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + buttons.length) % buttons.length;
-  setMood(buttons[next].dataset.mood!);
-  buttons[next].focus();
-});
-setMood("auto");
-
 function reveal(step: HTMLElement) {
   if (step.classList.contains("show")) return;
   step.classList.add("show");
@@ -919,17 +906,17 @@ async function populateOptions() {
   const branding = { style: brandStyle.value, opacity: brandOpacity.value };
   const animation = sel.animation.value;
   options = { ...o, fonts: { ...LOCAL_GOOGLE_FONTS, ...o.fonts } };
-  fill(sel.ratio, o.ratios.map((r) => [r, r]));
+  fill(sel.ratio, outputRatios.filter(r => o.ratios.includes(r)).map(r => [r, r]));
+  if (!sel.ratio.value) sel.ratio.value = "9:16";
   fill(sel.count, o.counts.map((n) => [String(n), `${n} clip${n > 1 ? "s" : ""}`]));
   fill(sel.duration, o.durations.map((d) => [String(d), `≤ ${d}s`]));
+  if (!sel.count.value) sel.count.value = "4";
+  if (!sel.duration.value) sel.duration.value = "60";
   fill(sel.font, Object.entries(options.fonts).sort(([, left], [, right]) =>
     left.localeCompare(right, undefined, { sensitivity: "base" }),
   ));
   syncCaptionWeightAvailability();
-  fill(sel.animation, Object.entries(o.animations));
-  if (animation === "word" && !("word" in o.animations) && "pop" in o.animations) {
-    sel.animation.value = "pop";
-  }
+  fillAnimations(animation);
   fill(sel.case, Object.entries(o.cases));
   fill(sel.source, [["auto", "auto (from clip)"], ["upload", "upload image"]]);
   fill(sel.titleStyle, Object.entries(o.title_styles));
@@ -1024,7 +1011,7 @@ positionFrame.addEventListener("click", (e) => {
 function revealSettings() {
   if (mode === "filming") reveal(steps.film);
   else {
-    reveal(steps.mood);
+    reveal(steps.objective);
     reveal(steps.clip);
   }
   reveal(steps.caption);
@@ -1035,8 +1022,8 @@ function revealSettings() {
 function missingFields(): HTMLElement[] {
   const filming = mode === "filming";
   const selects = filming
-    ? [filmRatio, filmSourceRatio, filmBackground, filmDuration, filmVoice, filmStyle]
-    : [sel.ratio, clipRatio, clipBackground, sel.duration, sel.count, sel.voice];
+    ? [filmRatio, filmBackground, filmDuration, filmVoice, filmStyle]
+    : [sel.ratio, clipBackground, sel.duration, sel.count, sel.voice];
   selects.push(sel.font, sel.animation, sel.case, captionMode, captionPosition, captionWeight,
     sel.source);
   if (thumbTextMode.value !== "none") selects.push(sel.titleStyle);
@@ -1119,9 +1106,10 @@ document.querySelectorAll<HTMLButtonElement>("[data-step-input]").forEach((butto
 });
 thumbText.addEventListener("input", progress);
 thumbTextMode.addEventListener("change", progress);
-[clipRatio, clipBackground, filmSourceRatio, filmBackground, filmEpisodes, filmDuration, filmVoice, filmRatio, filmStyle,
+[clipBackground, filmBackground, filmEpisodes, filmDuration, filmVoice, filmRatio, filmStyle,
   captionMode, captionPosition, captionWeight, captionLines, filmDubSpeed].forEach((field) => field.addEventListener("input", progress));
 filmRatio.addEventListener("change", shapeFrame);
+captionMode.addEventListener("input", () => { fillAnimations(); progress(); });
 sel.ratio.addEventListener("change", shapeFrame);
 sel.source.addEventListener("change", () => {
   imagePick.hidden = sel.source.value !== "upload";
@@ -1161,7 +1149,8 @@ function openFlow(k: KeyState, focus = true) {
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
-  if (!ready() || button.disabled) return;
+  if (!ready() || button.disabled || starting) return;
+  if (started) resetAll(false, true);
   try {
     await loadOptions();
     const res = await fetch("/api/key");
@@ -1212,8 +1201,7 @@ function settings() {
     return {
       mode: "filming",
       music_start: musicStartWanted, music_length: musicWindowLength() || null,
-      film: { episodes: Number(filmEpisodes.value), max_duration: Number(filmDuration.value), style: filmStyle.value, additional_prompt: filmPrompt.value.trim(), voice: filmVoice.value, source_ratio: filmSourceRatio.value, background: filmBackground.value },
-      mood: "auto",
+      film: { episodes: Number(filmEpisodes.value), max_duration: Number(filmDuration.value), style: filmStyle.value, additional_prompt: filmPrompt.value.trim(), voice: filmVoice.value, source_ratio: savedFilmCrop, background: filmBackground.value },
       clip: { ratio: filmRatio.value, fit: "crop", count: Number(filmEpisodes.value), max_duration: Number(filmDuration.value), dubbing_speed: Number(filmDubSpeed.value) },
       caption: { font: sel.font.value, animation: sel.animation.value, color, case: sel.case.value, position: Number(captionPosition.value), display: captionMode.value, font_weight: captionWeight.value, max_lines: Number(captionLines.value) },
       thumb: { source: sel.source.value, title_style: thumbTextMode.value === "none" ? "none" : sel.titleStyle.value, text: thumbTextMode.value === "manual" ? thumbText.value.trim() : "", text_mode: thumbTextMode.value, sequence: thumbNumber.value, position: thumbPosition, voice: null },
@@ -1221,9 +1209,9 @@ function settings() {
     };
   }
   return {
-    mood,
+    objective: clipObjective.value.trim(),
     music_start: musicStartWanted, music_length: musicWindowLength() || null,
-    clip: { ratio: sel.ratio.value, fit: "crop", clip_ratio: clipRatio.value, background: clipBackground.value, count: Number(sel.count.value), max_duration: Number(sel.duration.value) },
+    clip: { ratio: sel.ratio.value, fit: "crop", clip_ratio: savedClipCrop, background: clipBackground.value, count: Number(sel.count.value), max_duration: Number(sel.duration.value) },
     caption: { font: sel.font.value, animation: sel.animation.value, color, case: sel.case.value, position: Number(captionPosition.value), display: captionMode.value, font_weight: captionWeight.value, max_lines: Number(captionLines.value) },
     thumb: {
       source: sel.source.value,
@@ -1295,11 +1283,17 @@ startButton.addEventListener("click", async () => {
 });
 
 /** Empty every field and fold the steps away, ready for the next video. */
-function resetAll(focus = true) {
-  setMood("auto");
+function resetAll(focus = true, keepSource = false) {
+  clipObjective.value = "";
+  filmPrompt.value = "";
+  savedClipCrop = savedFilmCrop = "auto";
   setStarted(false);
-  input.value = "";
-  clear();
+  if (!keepSource) {
+    input.value = "";
+    clear();
+  } else {
+    clearSubtitle();
+  }
   setHint(hint, HINT);
   Object.values(sel).forEach((s) => (s.selectedIndex = 0));
   color = DEFAULT_CAPTION_COLOR;
@@ -1308,14 +1302,22 @@ function resetAll(focus = true) {
   thumbText.value = "";
   thumbTextMode.value = "auto";
   filmDubSpeed.value = "1.0";
-  setClipCrop("auto"); clipBackground.value = "black";
-  setFilmCrop("auto"); filmBackground.value = "black";
+  restoreRatio(sel.ratio, "9:16");
+  restoreRatio(filmRatio, "9:16");
+  sel.count.value = "4";
+  sel.duration.value = "60";
+  filmDuration.value = "60";
+  filmStyle.selectedIndex = 0;
+  filmVoice.selectedIndex = 0;
+  clipBackground.value = "black";
+  filmBackground.value = "black";
   filmEpisodes.value = filmEpisodes.defaultValue;
   clearVideoPreset();
   thumbNumber.value = "off";
   setThumbPosition("bc");
   captionPosition.value = "6";
   captionMode.value = "sentence";
+  fillAnimations();
   captionLines.value = "2";
   captionLinesPick.hidden = false;
   captionWeight.value = "regular";
@@ -1429,7 +1431,10 @@ function projectCard(p: Project): HTMLLIElement {
   const heading = p.url
     ? el("a", { className: "project-title", href: p.url, target: "_blank", rel: "noopener", textContent: sourceTitle, title: "Buka video sumber di YouTube" })
     : el("button", { type: "button", className: "project-title", textContent: sourceTitle, title: "Buka folder video sumber" });
-  if (!p.url) {
+  if (p.url) {
+    openYoutubeInBrowser(cover, p.url);
+    openYoutubeInBrowser(heading, p.url);
+  } else {
     cover.addEventListener("click", () => { void openSource(cover); });
     heading.addEventListener("click", () => { void openSource(heading); });
   }
@@ -1547,7 +1552,7 @@ const videoPresets: Record<string, {animation: string; color: string; display: s
   box: {animation: "box", color: "yellow", display: "sentence", fontWeight: "extra-bold", letterCase: "upper", title: "box", font: "montserrat", description: "Kotak menonjolkan kata aktif."},
   cinematic: {animation: "fade", color: "white", display: "sentence", fontWeight: "regular", letterCase: "sentence", title: "shadow", font: "montserrat", description: "Tampilan sederhana agar visual cerita tetap menonjol."},
   edukasi: {animation: "reveal", color: "green", display: "sentence", fontWeight: "bold", letterCase: "sentence", title: "bold", font: "poppins", description: "Tegas dan mudah dibaca untuk materi penjelasan."},
-  neon: {animation: "glow", color: "cyan", display: "word", fontWeight: "extra-bold", letterCase: "upper", title: "stamp", font: "bangers", description: "Kontras cepat dengan aksen neon untuk momen energik."},
+  neon: {animation: "word-neon", color: "cyan", display: "word", fontWeight: "extra-bold", letterCase: "upper", title: "stamp", font: "bangers", description: "Kontras cepat dengan aksen neon untuk momen energik."},
   minimal: {animation: "fade", color: "white", display: "sentence", fontWeight: "regular", letterCase: "sentence", title: "none", font: "poppins", description: "Caption ringan dengan tampilan visual yang paling bersih."},
 };
 const videoPreset = $<HTMLSelectElement>("#video-preset");
@@ -1556,8 +1561,8 @@ videoPreset.addEventListener("change", () => {
   if (!preset || !options) return;
   // Presets intentionally affect only the manual caption and thumbnail controls below.
   // Mood and all clip/filming settings above remain exactly as the user chose them.
-  sel.font.value = preset.font; sel.animation.value = preset.animation; sel.case.value = preset.letterCase;
-  captionMode.value = preset.display; captionLines.value = "2"; captionPosition.value = "5";
+  sel.font.value = preset.font; sel.case.value = preset.letterCase;
+  captionMode.value = preset.display; fillAnimations(preset.animation); captionLines.value = "2"; captionPosition.value = "5";
   captionWeight.value = preset.fontWeight; color = preset.color;
   swatches.querySelectorAll<HTMLButtonElement>("button").forEach(b => b.setAttribute("aria-checked", String(b.dataset.color === color)));
   sel.titleStyle.value = preset.title;

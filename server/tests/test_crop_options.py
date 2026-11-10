@@ -1,5 +1,4 @@
 import json
-import re
 import shutil
 import subprocess
 import tempfile
@@ -13,7 +12,7 @@ from app import ClipSettings, FilmSettings
 from clipy import film, media
 
 
-RATIOS = ['9:16', '16:9', '1:1', '4:5', '5:4']
+RATIOS = ['16:9', '4:3', '1:1', '4:5', '9:16']
 
 
 class SelectOptions(HTMLParser):
@@ -40,17 +39,13 @@ class CropOptionsTests(unittest.TestCase):
         html = (Path(__file__).resolve().parents[2] / 'web/index.html').read_text(encoding='utf-8')
         parser.feed(html)
         self.assertEqual(parser.options['film-ratio'], RATIOS)
-        self.assertEqual(parser.options['film-source-ratio'], ['auto', 'none', 'blackbar', *RATIOS])
-        self.assertRegex(html, re.compile(r'<select id="film-source-ratio"[^>]*>.*?</select><span>crop clip</span>'))
+        self.assertNotIn('film-source-ratio', html)
+        self.assertNotIn('opt-clip-ratio', html)
         self.assertEqual(parser.options['film-background'], ['black', 'white', 'blur'])
-        if 'opt-clip-ratio' in parser.options:
-            self.assertEqual(parser.options['opt-clip-ratio'], ['auto', 'none', 'blackbar', *RATIOS])
-            self.assertRegex(html, re.compile(r'<select id="opt-clip-ratio"[^>]*>.*?</select><span>crop clip</span>'))
-            self.assertEqual(parser.options['opt-background'], ['black', 'white', 'blur'])
-        self.assertEqual(list(media.RATIOS), RATIOS)
-        for ratio in RATIOS:
+        self.assertEqual(parser.options['opt-background'], ['black', 'white', 'blur'])
+        self.assertEqual(list(media.RATIOS), [*RATIOS, '5:4'])
+        for ratio in [*RATIOS, '5:4']:
             self.assertEqual(ClipSettings(ratio=ratio, fit='crop', count=1, max_duration=60).ratio, ratio)
-            self.assertEqual(FilmSettings(source_ratio=ratio).source_ratio, ratio)
         for mode in ('none', 'blackbar', 'auto', '3:4'):
             self.assertEqual(FilmSettings(source_ratio=mode).source_ratio, mode)
             if 'clip_ratio' in ClipSettings.model_fields:

@@ -588,7 +588,8 @@ def _run(p: Project) -> None:
     picks = select.pick_clips(words, int(clip_cfg["count"]), float(clip_cfg["max_duration"]), p.language,
                               exclude=used_ranges(p.source_key, skip=p.id), mood=p.settings.get("mood", "auto"),
                               allow_approximate=getattr(p, 'transcript_timing', None) == 'segmen',
-                              on_approximate=uncertain_boundary)
+                              on_approximate=uncertain_boundary,
+                              objective=p.settings.get('objective', ''))
     if getattr(p, 'transcript_timing', None) == 'segmen' and len(picks) > 1:
         lengths = [item.end - item.start for item in picks]
         if max(lengths) - min(lengths) > 3:

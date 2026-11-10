@@ -3,12 +3,12 @@ import { el } from "./editor";
 /** The native select still owns the value and validation used by the form. */
 export function previewSelect(select: HTMLSelectElement, group: string) {
   const field = select.parentElement!;
-  const label = field.querySelector("span")!.textContent!;
+  const label = field.querySelector("span")!;
   select.hidden = true;
   const trigger = el("button", { className: "option-trigger", type: "button" });
   const list = el("div", { className: "option-list", id: `${select.id}-options`, hidden: true });
   list.setAttribute("role", "listbox");
-  list.setAttribute("aria-label", label);
+  list.setAttribute("aria-label", label.textContent ?? "");
   trigger.setAttribute("aria-controls", list.id);
   trigger.setAttribute("aria-haspopup", "listbox");
   field.classList.add("preview-pick");
@@ -22,7 +22,8 @@ export function previewSelect(select: HTMLSelectElement, group: string) {
     trigger.disabled = select.disabled;
     trigger.title = select.title;
     field.classList.toggle("is-disabled", select.disabled);
-    trigger.setAttribute("aria-label", `${label}: ${trigger.textContent}`);
+    list.setAttribute("aria-label", label.textContent ?? "");
+    trigger.setAttribute("aria-label", `${label.textContent}: ${trigger.textContent}`);
     trigger.setAttribute("aria-disabled", String(select.disabled));
     trigger.setAttribute("aria-expanded", String(!list.hidden));
     trigger.setAttribute("aria-invalid", select.getAttribute("aria-invalid") ?? "false");
@@ -38,7 +39,7 @@ export function previewSelect(select: HTMLSelectElement, group: string) {
     const options = Array.from(select.options).filter((option) => !option.disabled && !option.hidden);
     if (!options.length) return;
     const buttons = options.map((option) => {
-      const styledName = !["font", "font-weight"].includes(group) && option.value !== "none";
+      const styledName = !["font", "font-weight"].includes(group) && option.value !== "none" && !option.value.startsWith("word-");
       const button = el("button", { type: "button", className: "option-preview" },
         styledName ? null : el("span", { textContent: option.text }),
         styledName ? el("img", { src: `/option-previews/${group}-${encodeURIComponent(option.value)}.webp`, alt: "", width: 160, height: 44 }) : null,

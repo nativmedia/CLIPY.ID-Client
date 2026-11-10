@@ -61,7 +61,7 @@
           <div class="preview-inner">
             <figure class="card">
               <div class="thumb" id="thumb-box">
-                <img id="thumb" alt="" />
+                <a id="thumb-source" aria-label="Buka video sumber di YouTube"><img id="thumb" alt="" /></a>
                 <div class="player" id="player" hidden></div>
                 <button type="button" class="play" id="play" aria-label="play preview">
                   <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4v12l10-6z" fill="currentColor" /></svg>
@@ -79,7 +79,7 @@
                   </svg>
                 </span>
               </div>
-              <figcaption class="title" id="title"></figcaption>
+              <figcaption class="title" id="title"><a id="title-source"></a></figcaption>
             </figure>
           </div>
         </div>
@@ -126,8 +126,7 @@
           <div class="step-inner">
             <p class="kicker"><span>filming</span></p>
             <div class="row cols-4">
-              <label class="pick"><select id="film-ratio" required><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>output ratio</span></label>
-              <label class="pick"><select id="film-source-ratio" required><option value="auto">auto (output ratio)</option><option value="none">no crop</option><option value="blackbar">crop black bar</option><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>crop clip</span></label>
+              <label class="pick"><select id="film-ratio" required><option value="16:9">16:9</option><option value="4:3">4:3</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="9:16" selected>9:16</option></select><span>output ratio</span></label>
               <label class="pick" id="film-background-pick"><select id="film-background" required><option value="black">no background</option><option value="white">putih</option><option value="blur">blur</option></select><span>background</span></label>
               <label class="pick"><select id="film-duration" required><option value="60">≤ 60 detik</option><option value="90">≤ 90 detik</option><option value="120">≤ 120 detik</option><option value="180">≤ 180 detik</option></select><span>duration</span></label>
               <div class="pick episode-pick">
@@ -136,7 +135,7 @@
                   <button type="button" id="film-episodes-up" aria-label="Tambah jumlah episode">▴</button>
                   <button type="button" id="film-episodes-down" aria-label="Kurangi jumlah episode">▾</button>
                 </div>
-                <span id="film-episodes-label">jumlah episode</span>
+                <span id="film-episodes-label">output clips</span>
               </div>
               <label class="pick"><select id="film-voice" required></select><span>suara narator</span></label>
               <div class="pick episode-pick">
@@ -148,25 +147,14 @@
                 <span id="film-dub-speed-label">kecepatan dubbing</span>
               </div>
               <label class="pick"><select id="film-style" required><option value="dramatis dan sinematik">dramatis &amp; sinematik</option><option value="santai dan menghibur">santai &amp; menghibur</option><option value="misterius dan menegangkan">misterius &amp; menegangkan</option><option value="informatif dan jelas">informatif &amp; jelas</option><option value="lucu dan energik">lucu &amp; energik</option></select><span>gaya narasi</span></label>
-              <label class="pick film-prompt"><input class="text-pick" id="film-prompt" type="text" maxlength="2000" placeholder="opsional" /><span>additional prompt</span></label>
+              <label class="pick film-prompt"><input class="text-pick" id="film-prompt" type="text" maxlength="2000" placeholder="opsional" /><span>instruksi hasil (opsional)</span></label>
             </div>
           </div>
         </div>
 
-        <div class="step" id="step-mood">
+        <div class="step" id="step-objective">
           <div class="step-inner">
-            <p class="kicker" id="mood-label"><span>mood</span></p>
-            <div class="mood-options" id="opt-mood" role="radiogroup" aria-labelledby="mood-label">
-              <button type="button" role="radio" aria-checked="true" data-mood="auto">auto</button>
-              <button type="button" role="radio" aria-checked="false" data-mood="senang">senang</button>
-              <button type="button" role="radio" aria-checked="false" data-mood="sedih">sedih</button>
-              <button type="button" role="radio" aria-checked="false" data-mood="lucu">lucu</button>
-              <button type="button" role="radio" aria-checked="false" data-mood="serius">serius</button>
-              <button type="button" role="radio" aria-checked="false" data-mood="seram">seram</button>
-              <button type="button" role="radio" aria-checked="false" data-mood="informatif">informatif</button>
-              <button type="button" role="radio" aria-checked="false" data-mood="inspiratif">inspiratif</button>
-              <button type="button" role="radio" aria-checked="false" data-mood="konyol">konyol</button>
-            </div>
+            <label class="pick film-prompt"><textarea class="text-pick" id="clip-objective" maxlength="2000" rows="2" placeholder="Contoh: fokus pada tips praktis dan hindari bagian promosi"></textarea><span>instruksi hasil (opsional)</span></label>
           </div>
         </div>
 
@@ -175,10 +163,9 @@
             <p class="kicker"><span>clip</span></p>
             <div class="row cols-4">
               <label class="pick"><select id="opt-ratio" required></select><span>output ratio</span></label>
-              <label class="pick"><select id="opt-clip-ratio" required><option value="auto">auto (output ratio)</option><option value="none">no crop</option><option value="blackbar">crop black bar</option><option value="9:16">9:16</option><option value="16:9">16:9</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="5:4">5:4</option></select><span>crop clip</span></label>
               <label class="pick"><select id="opt-background" required><option value="black">no background</option><option value="white">putih</option><option value="blur">blur</option></select><span>background</span></label>
               <label class="pick"><select id="opt-duration" required></select><span>duration</span></label>
-              <label class="pick"><select id="opt-count" required></select><span>clips</span></label>
+              <label class="pick"><select id="opt-count" required></select><span>output clips</span></label>
             </div>
           </div>
         </div>
@@ -193,12 +180,12 @@
             <p class="kicker caption-kicker"><span>auto caption</span></p>
             <div class="row cols-4">
               <label class="pick"><select id="opt-caption-mode" required><option value="word">per kata</option><option value="sentence" selected>per kalimat</option></select><span>tampilan caption</span></label>
+              <label class="pick"><select id="opt-animation" required></select><span id="caption-animation-label">animasi per kalimat</span></label>
               <label class="pick" id="caption-lines-pick"><select id="opt-caption-lines" required><option value="1">1 baris</option><option value="2" selected>2 baris</option><option value="3">3 baris</option></select><span>maksimal baris</span></label>
               <label class="pick"><select id="opt-caption-position" required><option value="1">paling atas</option><option value="2">atas</option><option value="3">atas tengah</option><option value="4">tengah</option><option value="5">bawah tengah</option><option value="6" selected>bawah</option><option value="7">paling bawah</option></select><span>posisi caption</span></label>
               <div class="pick"><select id="opt-font" required></select><span>font</span></div>
               <div class="pick"><select id="opt-caption-weight" required><option value="thin">Thin</option><option value="regular" selected>Regular</option><option value="bold">Bold</option><option value="extra-bold">Extra Bold</option></select><span>font weight</span></div>
               <div class="pick"><div class="swatches" id="opt-color" role="radiogroup" aria-required="true" aria-label="color"></div><span>color</span></div>
-              <div class="pick"><select id="opt-animation" required></select><span>animation</span></div>
               <label class="pick"><select id="opt-case" required></select><span>letter case</span></label>
             </div>
           </div>

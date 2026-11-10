@@ -92,6 +92,14 @@ ANIMATIONS = {
     "glow": "Word glow",
     "pop": "Pop",
     "fade": "Fade",
+    "word-shadow": "Shadow",
+    "word-3d": "3D",
+    "word-outline": "Outline",
+    "word-bounce": "Bounce",
+    "word-slide": "Slide",
+    "word-punch": "Punch",
+    "word-neon": "Neon",
+    "word-box": "Box",
 }
 FONT_FILES = {
     "montserrat": "Montserrat[wght].ttf",
@@ -432,7 +440,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for word, text, advance in row:
                 start, end = max(cue.start, word.start), next_time.get(id(word), cue.end)
                 tags = fr"\an5\pos({round(x + advance / 2)},{round(y)})\fs{size * font_scale:.2f}\b{font_weight}\bord{outline}\shad{shadow}"
-                if animation == "fade":
+                if animation == "word-shadow":
+                    emit(start, end, tags + fr"\c{hi}\shad5\4c{black}\fad(45,35)", text)
+                elif animation == "word-3d":
+                    depth = max(2, round(size * .09))
+                    emit(start, end, tags + fr"\c{hi}\bord1\3c{black}\xshad{depth}\yshad{depth}\4c{black}", text)
+                elif animation == "word-outline":
+                    emit(start, end, tags + fr"\c{hi}\bord{max(2, round(size * .08))}\3c{black}", text)
+                elif animation == "word-bounce":
+                    emit(start, end, tags + fr"\c{hi}\fscx78\fscy78\t(0,85,\fscx112\fscy112)\t(85,155,\fscx100\fscy100)", text)
+                elif animation == "word-slide":
+                    anchor = round(x + advance / 2)
+                    move = fr"\move({anchor},{round(y + size * .18)},{anchor},{round(y)},0,120)"
+                    emit(start, end, tags.replace(fr"\pos({anchor},{round(y)})", move) + fr"\c{hi}\fad(65,0)", text)
+                elif animation == "word-punch":
+                    emit(start, end, tags + fr"\c{hi}\fscx120\fscy120\t(0,120,\fscx100\fscy100)", text)
+                elif animation == "fade":
                     emit(cue.start, cue.end, tags + fr"\c{hi}\fad(140,80)", text)
                 elif animation == "karaoke":
                     # A single word event includes a delay and a left-to-right fill.
@@ -443,12 +466,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     emit(start, cue.end, tags + fr"\c{hi}\fad(70,0)", text)
                 else:
                     idle = tags + fr"\c{white}"
-                    if animation == "glow":
+                    if animation in ("glow", "word-neon"):
                         idle += fr"\bord{max(outline, 1, round(size * .028))}"
                     emit(cue.start, start, idle, text)
                     emit(end, cue.end, idle, text)
                     active = tags + fr"\c{hi}"
-                    if animation == "glow":
+                    if animation in ("glow", "word-neon"):
                         # Keep the halo's fill invisible and draw the sharp letters over it.
                         boxed = False
                         if boxed:
@@ -462,14 +485,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         continue
                     elif animation == "pop":
                         active += fr"\3c{hi}\bord{max(2, round(size * .10))}\t(0,130,\bord{outline}\3c{black})"
-                    elif animation in ("box", "underline"):
+                    elif animation in ("box", "underline", "word-box"):
                         pad = max(2, round(size * .08))
                         box_w = round(advance + 2 * pad)
-                        box_h = round(size * 1.12) if animation == "box" else pad
-                        top = round(y - box_h / 2) if animation == "box" else round(y + size * .48)
+                        box_h = round(size * 1.12) if animation in ("box", "word-box") else pad
+                        top = round(y - box_h / 2) if animation in ("box", "word-box") else round(y + size * .48)
                         box_tags = fr"\an7\pos({round(x - pad)},{top})\p1\bord0\shad0\c{hi}"
                         emit(start, end, box_tags, f"m 0 0 l {box_w} 0 {box_w} {box_h} 0 {box_h}", name="Shape", layer=0)
-                        if animation == "box":
+                        if animation in ("box", "word-box"):
                             active = tags + fr"\c{black}\bord0\shad0"
                     emit(start, end, active, text)
                 x += advance + cue.space
