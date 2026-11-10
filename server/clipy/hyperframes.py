@@ -85,16 +85,17 @@ def caption_composition(folder, words, style, width, height, duration, *, stacke
     center = (height * (0.17 + (style.position - 1) * .11) if style.position is not None else
               height * .88 if stacked else captions.layout_for(width, height).baseline)
     animation = "pop" if style.animation == "word" else style.animation
+    font_weight = captions.font_weight_value(style.font_weight)
     body, cues = [], []
     outline = 0
     for ci, cue in enumerate(captions._caption_cues(words, style, width, height)):
         if cue.start >= duration:
             continue
         size = cue.size
-        outline = round(size * .08) if style.text_style == "outline" else 0
+        outline = 0
         if animation == "glow":
             outline = max(outline, round(size * .035), 1)
-        shadow = f"text-shadow:0 {max(1, size * .07)}px {size * .1}px #000;" if style.text_style == "shadow" else ""
+        shadow = ""
         block = cue.line_height * len(cue.rows)
         y = max(block / 2, min(height - block / 2, center)) - block / 2
         spoken = [row[0] for line in cue.rows for row in line]
@@ -111,20 +112,19 @@ def caption_composition(folder, words, style, width, height, duration, *, stacke
                     x += advance + cue.space
                     continue
                 data["words"].append({"id": ident, "start": start, "end": end, "outline": outline})
-                box = f"background:#000;padding:0 {size * .08}px;" if style.text_style == "box" else ""
-                accent = f"inset:12% -{size * .08}px;background:{color};border-radius:{size * .08}px;"
+                accent = f"inset:12% -{size * .08}px;background:{color};border-radius:{size * .08}px;font-weight:{font_weight};"
                 content = ""
                 if animation == "underline":
                     accent = f"left:0;right:0;bottom:6%;height:{max(2,size*.06)}px;background:{color};transform-origin:left;"
                 elif animation in ("glow", "karaoke"):
                     content = html.escape(text)
-                    accent = f"inset:0;display:flex;align-items:center;justify-content:center;color:{color};white-space:pre;"
+                    accent = f"inset:0;display:flex;align-items:center;justify-content:center;color:{color};white-space:pre;font-weight:{font_weight};"
                     if animation == "glow":
                         accent += f"color:transparent;text-shadow:0 0 {size*.12}px {color},0 0 {size*.2}px {color};"
                 markup.append(f'<div class="word" id="{ident}" style="left:{x:.3f}px;top:{y:.3f}px;width:{advance:.3f}px;'
                               f'height:{cue.line_height}px;font-size:{size}px;line-height:1">'
                               f'<span class="accent" aria-hidden="true" data-layout-ignore style="{accent}">{content}</span>'
-                              f'<span class="glyph" style="-webkit-text-stroke:{outline}px #000;{shadow}{box}">{html.escape(text)}</span></div>')
+                              f'<span class="glyph" style="font-weight:{font_weight};-webkit-text-stroke:{outline}px #000;{shadow}">{html.escape(text)}</span></div>')
                 x += advance + cue.space
             y += cue.line_height
         body.append(f'<div class="cue" id="{data["id"]}">{"".join(markup)}</div>')
