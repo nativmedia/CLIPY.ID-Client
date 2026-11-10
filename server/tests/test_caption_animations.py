@@ -107,3 +107,18 @@ class CaptionAnimationTests(unittest.TestCase):
         self.assertGreater(len(srt_cues), 1)
         self.assertTrue(all(len(cue.splitlines()[2:]) == 1 for cue in srt_cues))
 
+    def test_overlapping_segment_windows_become_serialized_visual_cues(self):
+        words = [
+            captions.Word("Misalnya kita tuning", 32.34, 36.11),
+            captions.Word("Iya kan kita", 33.48, 35.12),
+            captions.Word("Harus menyesuaikan", 34.97, 37.82),
+        ]
+        style = captions.CaptionStyle(font="poppins", display="sentence", max_lines=1)
+        cues = captions._caption_cues(words, style, 1080, 1920)
+
+        self.assertTrue(all(first.end <= second.start for first, second in zip(cues, cues[1:])))
+        self.assertTrue(all(cue.end > cue.start for cue in cues))
+        # Poppins' ASS line box is wider than its nominal Pillow size.  The
+        # measured line height must follow the same scale as the emitted text.
+        self.assertGreater(cues[0].line_height, cues[0].size * 1.5)
+

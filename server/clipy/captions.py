@@ -249,7 +249,9 @@ def expand_coarse_words(words: list[Word]) -> list[Word]:
             start = max(word.start, previous_start, raw_start - lead)
             expanded.append(Word(token, start, end))
             previous_start = start
-    return expanded
+    # Segment captions can overlap while they are refreshed by YouTube.  Sort
+    # the synthesized word starts before a renderer turns them into cues.
+    return sorted(expanded, key=lambda entry: (entry.start, entry.end, entry.text.casefold()))
 
 
 def apply_case(text: str, case: str, first_in_sentence: bool) -> str:
@@ -316,7 +318,11 @@ def _caption_cues(words: list[Word], style: CaptionStyle, width: int, height: in
     weight = style.font_weight if font_name in FONT_WEIGHT_FONTS else "regular"
     mode_scale = 1.12 if single else 0.63 if sentence else 1
     size = max(1, round(layout.font_size * mode_scale * CAPTION_SIZE_SCALES.get(font_name, 1)))
-    font = _font(font_name, size, weight)
+    # Caption anchors are emitted at `size * ass_scale` below.  Measure at the
+    # same visual size so proportional fonts cannot collide horizontally.
+    ass_scale = _ass_font_scale(font_name, weight)
+    measure_size = max(1, round(size * ass_scale))
+    font = _font(font_name, measure_size, weight)
     limit = width * 0.86
     max_lines = style.max_lines if sentence else 1
     if single:
@@ -336,7 +342,7 @@ def _caption_cues(words: list[Word], style: CaptionStyle, width: int, height: in
             if not rows[0]:
                 return
             first, last = rows[0][0][0], rows[-1][-1][0]
-            cues.append(CaptionCue(rows, size, round(size * 1.32), space, first.start, last.end + LINGER))
+            cues.append(CaptionCue(rows, size, round(measure_size * 1.32), space, first.start, last.end + LINGER))
 
         for word in chunk.words:
             label = labels[id(word)]
@@ -346,8 +352,8 @@ def _caption_cues(words: list[Word], style: CaptionStyle, width: int, height: in
             if advance > limit:
                 append_cue()
                 fitted = max(1, int(size * limit / advance))
-                advance = _font(font_name, fitted, weight).getlength(label)
-                cues.append(CaptionCue([[(word, label, advance)]], fitted, round(fitted * 1.32),
+                advance = _font(font_name, max(1, round(fitted * ass_scale)), weight).getlength(label)
+                cues.append(CaptionCue([[(word, label, advance)]], fitted, round(fitted * ass_scale * 1.32),
                                        0, word.start, word.end + LINGER))
                 rows, row_width = [[]], 0.0
                 continue
@@ -362,9 +368,14 @@ def _caption_cues(words: list[Word], style: CaptionStyle, width: int, height: in
             rows[-1].append((word, label, advance))
         append_cue()
 
+    # A rolling subtitle source can produce a later phrase whose estimated
+    # word onset comes before an earlier phrase ends.  ASS draws both dialogue
+    # events, making the text stack.  Serialize the actual visual cues and
+    # drop zero-length fragments rather than rendering unreadable collisions.
+    cues.sort(key=lambda cue: (cue.start, cue.end))
     for cue, following in zip(cues, cues[1:]):
         cue.end = min(cue.end, following.start)
-    return cues
+    return [cue for cue in cues if cue.end - cue.start >= .01]
 
 
 def build_ass(words: list[Word], style: CaptionStyle, width: int = 1080, height: int = 1920) -> str:
