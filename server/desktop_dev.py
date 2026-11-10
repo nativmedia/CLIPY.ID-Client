@@ -1,5 +1,6 @@
 """Run the development API until its desktop launcher closes the stdin pipe."""
 
+import os
 import sys
 from threading import Thread
 
@@ -10,8 +11,10 @@ def main():
     server = uvicorn.Server(uvicorn.Config("app:app", host="127.0.0.1", port=4758))
 
     def watch_launcher():
-        sys.stdin.buffer.read(1)
-        server.should_exit = True
+        try:
+            os.read(sys.stdin.fileno(), 1)
+        finally:
+            server.should_exit = True
 
     Thread(target=watch_launcher, daemon=True).start()
     server.run()
