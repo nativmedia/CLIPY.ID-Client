@@ -10,6 +10,9 @@ if (-not (Test-Path -LiteralPath $destination)) {
     & $git clone -- $repository $destination
     if ($LASTEXITCODE -ne 0) { throw 'Gagal mengambil repo CLIPY.ID-Client.' }
 } else {
+    if (-not (Test-Path -LiteralPath (Join-Path $destination '.git'))) {
+        throw "Folder $destination sudah digunakan. Gunakan git clone untuk memilih folder lain."
+    }
     $origin = & $git -C $destination remote get-url origin
     if ($LASTEXITCODE -ne 0 -or $origin -ne $repository) {
         throw "Folder $destination sudah digunakan. Gunakan git clone untuk memilih folder lain."

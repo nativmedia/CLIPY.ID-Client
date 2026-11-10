@@ -19,7 +19,7 @@ if [ ! -e "$destination" ]; then
   mkdir -p "$(dirname "$destination")"
   git clone -- "$repository" "$destination"
 else
-  if [ "$(git -C "$destination" remote get-url origin)" != "$repository" ]; then
+  if [ ! -e "$destination/.git" ] || [ "$(git -C "$destination" remote get-url origin 2>/dev/null)" != "$repository" ]; then
     printf '%s\n' "Folder $destination sudah digunakan. Gunakan git clone untuk memilih folder lain." >&2
     exit 1
   fi

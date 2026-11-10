@@ -2,7 +2,14 @@
 
 Aplikasi desktop untuk membuat klip pendek dan rangkuman cerita dari video YouTube atau file lokal. CLIPY.ID membantu memilih momen, menyesuaikan crop, membuat caption, dan menyiapkan video untuk dibagikan.
 
-<!-- desktop-preview -->
+![Jendela utama CLIPY.ID](docs/screenshots/desktop.webp)
+
+<details>
+<summary>Layar pembuka</summary>
+
+![Logo resmi CLIPY.ID saat aplikasi dibuka](docs/screenshots/startup.webp)
+
+</details>
 
 ## Install
 
@@ -26,7 +33,7 @@ Lokasi kode setelah pemasangan
 - macOS — `~/Library/Application Support/CLIPY.ID-Client`
 - Linux — `~/.local/share/CLIPY.ID-Client` atau di bawah `$XDG_DATA_HOME` jika disetel
 
-Jalankan ulang perintah instalasi untuk mengambil perubahan terbaru dari GitHub, atau buka folder tersebut dan jalankan **npm run dev:desktop** untuk memakai salinan yang sudah terpasang.
+Tutup CLIPY.ID sebelum menjalankan ulang perintah instalasi untuk mengambil perubahan terbaru dari GitHub, atau buka folder tersebut dan jalankan **npm run dev:desktop** untuk memakai salinan yang sudah terpasang.
 
 ## Jalankan dari kode sumber
 
@@ -49,10 +56,16 @@ Semua platform memerlukan Git, Node.js 24 LTS dengan npm, Python 3.12, Rust stab
 | Sistem | Kebutuhan tambahan |
 | --- | --- |
 | Windows x64 | Microsoft C++ Build Tools dengan workload **Desktop development with C++** dan WebView2 Runtime. Untuk FFmpeg, gunakan **winget install --id Gyan.FFmpeg --exact**. |
-| macOS Apple Silicon dan Intel | Jalankan **xcode-select --install** untuk memasang Xcode Command Line Tools. Dengan Homebrew, pasang **python@3.12 ffmpeg@7 portaudio**. Tambahkan hasil **$(brew --prefix ffmpeg@7)/bin** ke PATH. |
+| macOS Apple Silicon dan Intel | Jalankan **xcode-select --install** untuk memasang Xcode Command Line Tools. Pasang Python dan FFmpeg melalui Homebrew dengan perintah di bawah. |
 | Linux x64 (Ubuntu 24.04) | Gunakan sesi desktop dengan WebKitGTK 4.1. Pasang paket di bawah dan Node.js 24 melalui pengelola versi atau metode instalasi Node.js pilihan Anda. |
 
 Detail toolchain tersedia di [panduan Tauri](https://v2.tauri.app/start/prerequisites/).
+
+```sh
+# macOS
+brew install python@3.12 ffmpeg@7 portaudio
+export PATH="$(brew --prefix ffmpeg@7)/bin:$PATH"
+```
 
 ```sh
 # Ubuntu 24.04
