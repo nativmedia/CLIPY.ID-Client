@@ -1,0 +1,9 @@
+{
+  "name": "clipy-id-client",
+  "private": true,
+  "workspaces": ["web"],
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev:desktop": "node web/scripts/dev-desktop.mjs"
+  }
+}

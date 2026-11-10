@@ -4,8 +4,8 @@ uvicorn>=0.32
 faster-whisper>=1.1
 yt-dlp>=2025.1.1
 # CUDA 12 runtime libraries for faster-whisper (CTranslate2) on the GPU.
-nvidia-cublas-cu12
-nvidia-cudnn-cu12>=9,<10
+nvidia-cublas-cu12; (sys_platform == "win32" and platform_machine == "AMD64") or (sys_platform == "linux" and platform_machine == "x86_64")
+nvidia-cudnn-cu12>=9,<10; (sys_platform == "win32" and platform_machine == "AMD64") or (sys_platform == "linux" and platform_machine == "x86_64")
 # Clip selection with Claude (other providers are called over plain REST).
 anthropic>=1.0
 # Form uploads (custom thumbnail image).
@@ -16,5 +16,8 @@ fonttools
 # Intro dubbing voices (Microsoft Edge read-aloud voices).
 edge-tts
 # Speaker framing: YuNet face detection (OpenCV) + jaw movement (MediaPipe Face Landmarker).
-mediapipe
+# Current releases provide macOS wheels for Apple Silicon. Intel uses the
+# last compatible CPython 3.12 line with an Intel macOS wheel.
+mediapipe==0.10.21; sys_platform == "darwin" and platform_machine == "x86_64"
+mediapipe; sys_platform != "darwin" or platform_machine != "x86_64"
 opencv-contrib-python

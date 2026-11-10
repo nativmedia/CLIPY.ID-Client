@@ -17,7 +17,7 @@ CLIPY.ID API.
     GET    /api/projects/{id}/posts          titles/descriptions per clip and platform
     PUT    /api/projects/{id}/posts  {posts} save edits
 
-Run:  .venv/Scripts/python -m uvicorn app:app --port 4748
+Run with the server virtual environment: python -m uvicorn app:app --port 4748
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import mimetypes
 from subprocess import TimeoutExpired
@@ -169,6 +170,19 @@ def require_local_browser(request: Request) -> None:
     allowed_hosts = {"127.0.0.1:4747", "localhost:4747", "127.0.0.1:4748", "localhost:4748", "127.0.0.1:4757", "localhost:4757", "127.0.0.1:4758", "localhost:4758", desktop_origin.removeprefix("http://")}
     if request.headers.get("host", "") not in allowed_hosts:
         raise HTTPException(403, "Host tidak diizinkan")
+
+
+def open_local_path(path: Path, *, reveal: bool = False) -> None:
+    path = path.resolve()
+    if sys.platform == "win32":
+        if reveal:
+            subprocess.Popen(["explorer.exe", "/select,", str(path)])
+        else:
+            os.startfile(str(path))
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(path)] if reveal else ["open", str(path)])
+    else:
+        subprocess.Popen(["xdg-open", str(path.parent if reveal else path)])
 
 
 # ---------- key ----------
@@ -583,7 +597,7 @@ def get_project(project_id: str):
 
 @app.post("/api/projects/{project_id}/output/open")
 def open_project_output(project_id: str, request: Request):
-    """Reveal copied deliverables in Windows Explorer."""
+    """Open the folder containing the project deliverables."""
     require_local_browser(request)
     p = projects.get(project_id)
     if not p:
@@ -591,10 +605,8 @@ def open_project_output(project_id: str, request: Request):
     output = p.export_output_dir if p.export_output_dir and p.export_output_dir.is_dir() else p.dir
     if not output.is_dir():
         raise HTTPException(409, "Folder hasil belum tersedia")
-    if os.name != "nt":
-        raise HTTPException(501, "Buka folder hanya tersedia di Windows")
     try:
-        os.startfile(str(output))
+        open_local_path(output)
     except OSError as exc:
         raise HTTPException(500, f"Tidak dapat membuka folder: {exc}") from exc
     return {"ok": True}
@@ -602,7 +614,7 @@ def open_project_output(project_id: str, request: Request):
 
 @app.post("/api/projects/{project_id}/clips/{clip_number}/open")
 def open_clip_output(project_id: str, clip_number: int, request: Request):
-    """Open Explorer at the rendered clip and select that exact MP4 file."""
+    """Reveal the rendered clip in the local file manager."""
     require_local_browser(request)
     p = projects.get(project_id)
     if not p:
@@ -617,11 +629,8 @@ def open_clip_output(project_id: str, clip_number: int, request: Request):
     output = export / name if export and (export / name).is_file() else p.dir / name
     if not output.is_file():
         raise HTTPException(404, "File clip tidak ditemukan")
-    if os.name != "nt":
-        raise HTTPException(501, "Buka folder hanya tersedia di Windows")
     try:
-        # Separate arguments preserve spaces and commas in the selected filename.
-        subprocess.Popen(["explorer.exe", "/select,", str(output.resolve())])
+        open_local_path(output, reveal=True)
     except OSError as exc:
         raise HTTPException(500, f"Tidak dapat membuka file clip: {exc}") from exc
     return {"ok": True, "file": name}
@@ -637,10 +646,8 @@ def open_project_source(project_id: str, request: Request):
     source = p.local_video
     if source is None:
         raise HTTPException(409, "Video sumber lokal tidak tersedia")
-    if os.name != "nt":
-        raise HTTPException(501, "Buka folder hanya tersedia di Windows")
     try:
-        os.startfile(str(source.parent))
+        open_local_path(source.parent)
     except OSError as exc:
         raise HTTPException(500, f"Tidak dapat membuka folder sumber: {exc}") from exc
     return {"ok": True}
