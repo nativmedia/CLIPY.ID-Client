@@ -27,17 +27,26 @@ class Chunk:
 
 
 DEFAULT_COLOR = "white"
+FONT_WEIGHTS = {"thin": 100, "regular": 400, "bold": 700, "extra-bold": 800}
+
+
+def font_weight_value(weight: str) -> int:
+    """Translate the UI's stable weight names to ASS/CSS numeric weights."""
+    return FONT_WEIGHTS.get(weight, FONT_WEIGHTS["regular"])
 
 
 @dataclass
 class CaptionStyle:
     font: str = "montserrat"
+    font_weight: str = "regular"
     animation: str = "pop"
     color: str = DEFAULT_COLOR
     case: str = "upper"
     position: int | None = None
     display: str | None = None
-    text_style: str = "outline"
+    # Kept only so re-clipping an older saved project does not break.
+    # New settings use font_weight instead.
+    text_style: str = "plain"
     max_lines: int = 2
 
 
@@ -281,6 +290,7 @@ def build_ass(words: list[Word], style: CaptionStyle, width: int = 1080, height:
     font_name = style.font if style.font in FONTS else "montserrat"
     family = FONTS[font_name][1]
     font_scale = _ass_font_scale(font_name)
+    font_weight = font_weight_value(style.font_weight)
     hi = tag_color(COLORS.get(style.color, COLORS[DEFAULT_COLOR]))
     white = tag_color("#FFFFFF")
     black = tag_color("#000000")
@@ -302,8 +312,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Cap,{family},40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H60000000,0,0,0,0,100,100,0,0,{3 if style.text_style == "box" else 1},0,0,5,0,0,0,1
-Style: Shape,{family},40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H60000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
+Style: Cap,{family},40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H60000000,{font_weight},0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+Style: Shape,{family},40,&H00FFFFFF,&H00FFFFFF,&H00000000,&H60000000,{font_weight},0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -317,8 +327,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     for cue in _caption_cues(words, style, width, height):
         size = cue.size
         # Put each word at a fixed anchor. Only paint changes as the voice advances.
-        outline = round(size * .08) if style.text_style in ("outline", "box") else 0
-        shadow = round(size * .07) if style.text_style == "shadow" else 4 if style.text_style == "outline" else 0
+        outline = 0
+        shadow = 0
         block_half = cue.line_height * len(cue.rows) / 2
         y = max(block_half, min(height - block_half, center)) - block_half + cue.line_height / 2
         spoken = [item[0] for row in cue.rows for item in row]
@@ -329,7 +339,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             x = (width - row_width) / 2
             for word, text, advance in row:
                 start, end = max(cue.start, word.start), next_time.get(id(word), cue.end)
-                tags = fr"\an5\pos({round(x + advance / 2)},{round(y)})\fs{size * font_scale:.2f}\bord{outline}\shad{shadow}"
+                tags = fr"\an5\pos({round(x + advance / 2)},{round(y)})\fs{size * font_scale:.2f}\b{font_weight}\bord{outline}\shad{shadow}"
                 if animation == "fade":
                     emit(cue.start, cue.end, tags + fr"\c{hi}\fad(140,80)", text)
                 elif animation == "karaoke":
@@ -341,14 +351,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     emit(start, cue.end, tags + fr"\c{hi}\fad(70,0)", text)
                 else:
                     idle = tags + fr"\c{white}"
-                    if animation == "glow" and style.text_style != "box":
+                    if animation == "glow":
                         idle += fr"\bord{max(outline, 1, round(size * .028))}"
                     emit(cue.start, start, idle, text)
                     emit(end, cue.end, idle, text)
                     active = tags + fr"\c{hi}"
                     if animation == "glow":
                         # Keep the halo's fill invisible and draw the sharp letters over it.
-                        boxed = style.text_style == "box"
+                        boxed = False
                         if boxed:
                             emit(start, end, tags + r"\1a&HFF&", text, layer=0)
                         glow = tags + (fr"\1a&HFF&\3c{hi}\3a&H78&\shad0"
