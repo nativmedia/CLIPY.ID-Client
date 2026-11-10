@@ -114,6 +114,13 @@ class YouTubeTranscriptTests(unittest.TestCase):
         self.assertEqual((clips[0].start, clips[0].end), (20, 50))
         self.assertTrue(notices)
 
+    def test_approximate_boundary_rejects_a_clip_shorter_than_the_selected_duration(self):
+        words = [Word('Kalimat panjang tanpa timestamp kata.', 0, 100)]
+        picked = {'clips': [{'start': 20, 'end': 24, 'title': 'Terlalu pendek', 'reason': 'Tidak cukup konteks'}]}
+        with patch.object(select.keys, 'ask_json', return_value=picked):
+            with self.assertRaisesRegex(ValueError, "usable"):
+                select.pick_clips(words, 1, 60, 'id', allow_approximate=True)
+
     def test_coarse_segment_supplies_clamped_words_to_a_clip(self):
         words = [Word('Satu segmen panjang tetap harus memiliki caption pada clip ini.', 0, 20)]
 

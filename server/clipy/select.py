@@ -144,7 +144,10 @@ def pick_clips(words: list[Word], count: int, max_duration: float, language: str
             if on_approximate:
                 on_approximate()
         end = _complete(words, start, end, max_duration, picks + used)
-        if end - start < 3:
+        # Approximate subtitle timing may still leave only a tiny sliver of a
+        # conversation.  It is better to return fewer candidates than render a
+        # four-second "clip" when the selected duration calls for a full short.
+        if end - start < min(shortest, total):
             continue
         if any(start < p.end and end > p.start for p in picks + used):
             continue
