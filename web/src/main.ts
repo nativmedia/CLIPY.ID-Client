@@ -594,6 +594,15 @@ type Options = {
   brand_opacities: number[];
 };
 
+// These faces are available in the Windows renderer. Keep them in the picker
+// during a backend restart so a temporarily stale options response is not
+// allowed to erase the user's font choices.
+const LOCAL_WINDOWS_FONTS: Record<string, string> = {
+  cambria: "Cambria",
+  consolas: "Consolas",
+  "ink-free": "Ink Free",
+};
+
 type KeyState = { set: boolean; label?: string; masked?: string };
 
 const steps = {
@@ -894,11 +903,11 @@ async function populateOptions() {
   const narrator = filmVoice.value;
   const branding = { style: brandStyle.value, opacity: brandOpacity.value };
   const animation = sel.animation.value;
-  options = o;
+  options = { ...o, fonts: { ...LOCAL_WINDOWS_FONTS, ...o.fonts } };
   fill(sel.ratio, o.ratios.map((r) => [r, r]));
   fill(sel.count, o.counts.map((n) => [String(n), `${n} clip${n > 1 ? "s" : ""}`]));
   fill(sel.duration, o.durations.map((d) => [String(d), `≤ ${d}s`]));
-  fill(sel.font, Object.entries(o.fonts));
+  fill(sel.font, Object.entries(options.fonts));
   fill(sel.animation, Object.entries(o.animations));
   if (animation === "word" && !("word" in o.animations) && "pop" in o.animations) {
     sel.animation.value = "pop";
