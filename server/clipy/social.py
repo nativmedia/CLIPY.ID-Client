@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 from . import keys
+from .captions import Word, expand_coarse_words
 
 # Field limits as the platforms enforce them (characters).
 PLATFORMS = {
@@ -73,9 +74,10 @@ def save(project_dir, data: dict) -> dict:
 
 def generate(project_dir, video_title: str, clips: list[dict], words: list[dict]) -> dict:
     """One LLM call for every finished clip; returns {"<n>": {platform: {field: text}}}."""
+    timed_words = expand_coarse_words([Word(**word) for word in words])
     parts = []
     for c in clips:
-        text = " ".join(w["text"] for w in words if w["start"] >= c["start"] - 0.05 and w["end"] <= c["end"] + 0.3)
+        text = " ".join(w.text for w in timed_words if w.end > c["start"] and w.start < c["end"])
         parts.append(f"Clip {c['n']} — working title: {c['title']}\nTranscript: {text}")
     user = f"Source video: {video_title}\n\n" + "\n\n".join(parts)
     out = keys.ask_json(SYSTEM, user, SCHEMA)
@@ -90,3 +92,4 @@ def generate(project_dir, video_title: str, clips: list[dict], words: list[dict]
             "x": {"description": c["x"][:280]},
         }
     return save(project_dir, data)
+

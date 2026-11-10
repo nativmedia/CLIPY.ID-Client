@@ -434,6 +434,17 @@ def _save_words(p: Project, words: list[Word]) -> None:
     tmp.replace(p.dir / "words.json")
 
 
+def _local_words(words: list[Word], start: float, end: float) -> list[Word]:
+    """Return words visible in a clip, preserving overlap at either edge."""
+    local = []
+    for word in captions.expand_coarse_words(words):
+        word_start = max(word.start, start)
+        word_end = min(word.end, end)
+        if word_end > word_start:
+            local.append(Word(word.text, word_start - start, word_end - start))
+    return local
+
+
 def _run(p: Project) -> None:
     if p.music_url and not p.music:
         from . import music
@@ -641,11 +652,7 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
             media.remove_letterbox(src, clean, inset, _span(p, base + share * .25, base + share * .32))
         src = clean
 
-    local = [
-        Word(w.text, w.start - clip["start"], w.end - clip["start"])
-        for w in words
-        if w.start >= clip["start"] - 0.05 and w.end <= clip["end"] + 0.3
-    ]
+    local = _local_words(words, clip["start"], clip["end"])
     ass = p.clip_asset_path(clip, "ass")
     srt = p.clip_asset_path(clip, "srt")
     ass.write_text(captions.build_ass(local, opts["style"], width, height), encoding="utf-8")
@@ -910,3 +917,4 @@ def shutdown_worker() -> None:
         _scheduler.join()
     _scheduler = None
     _queue = queue.Queue()
+

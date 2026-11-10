@@ -84,3 +84,17 @@ class CaptionAnimationTests(unittest.TestCase):
             self.assertEqual(max(len(cue.splitlines()[2:]) for cue in cues), limit)
             self.assertEqual(" ".join(" ".join(cue.splitlines()[2:]) for cue in cues), " ".join(w.text for w in words))
 
+    def test_coarse_transcript_segment_becomes_readable_one_line_captions(self):
+        text = "Ini satu segmen subtitle otomatis yang sangat panjang sehingga harus dibagi menjadi kata-kata yang terbaca."
+        words = [captions.Word(text, 0, 12)]
+        style = captions.CaptionStyle(display="sentence", max_lines=1, case="sentence")
+
+        cues = captions._caption_cues(words, style, 360, 640)
+        srt_cues = captions.build_srt(words, style, 360, 640).strip().split("\n\n")
+
+        self.assertGreater(len(cues), 1)
+        self.assertTrue(all(cue.size > 20 for cue in cues))
+        self.assertTrue(all(len(cue.rows) == 1 for cue in cues))
+        self.assertGreater(len(srt_cues), 1)
+        self.assertTrue(all(len(cue.splitlines()[2:]) == 1 for cue in srt_cues))
+

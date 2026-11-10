@@ -42,7 +42,8 @@ class FilmAudioTests(unittest.TestCase):
             src, voice = d / 'source.mp4', d / 'voice.mp3'
             subprocess.run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'color=blue:s=160x120:r=30:d=3', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-c:v', 'libx264', '-c:a', 'aac', str(src)], check=True)
             subprocess.run(['ffmpeg', '-y', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=880:duration=2', '-c:a', 'libmp3lame', str(voice)], check=True)
-            p = SimpleNamespace(dir=d, upload_id='test', local_video=src, upload=None)
+            p = SimpleNamespace(dir=d, upload_id='test', local_video=src, upload=None,
+                                clip_asset_path=lambda clip, extension: d / f"clip_{clip['n']}.{extension}")
             clip = {'n': 1, 'shots': [{'start': 0, 'end': 2.8}], 'narration': 'Halo dunia', 'title': 'Episode'}
             opts = {'width': 180, 'height': 320, 'fit': 'crop', 'style': CaptionStyle(), 'brand': None, 'brand_position': 'bc', 'thumb_cfg': {'title_style': 'bold'}}
             with patch('clipy.film.tts.speak_aligned', return_value=(voice, [Word('Halo', 0.1, 0.5), Word('dunia', 0.9, 1.2)])), patch('clipy.media.video_encoders', return_value=[['-c:v', 'libx264', '-preset', 'ultrafast']]):
@@ -66,7 +67,8 @@ class FilmAudioTests(unittest.TestCase):
             subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=880:duration=4',
                             '-c:a', 'libmp3lame', str(voice)], check=True)
             (d / 'words.json').write_text('[{"text":"Merah","start":0.1,"end":0.5},{"text":"Biru","start":3.1,"end":3.5}]')
-            p = SimpleNamespace(dir=d, upload_id='test', local_video=src, upload=None)
+            p = SimpleNamespace(dir=d, upload_id='test', local_video=src, upload=None,
+                                clip_asset_path=lambda clip, extension: d / f"clip_{clip['n']}.{extension}")
             clip = {'n': 1, 'shots': [{'start': 0, 'end': 3}, {'start': 3, 'end': 6}],
                     'narration': 'Merah. Biru.', 'title': 'Episode'}
             opts = {'width': 180, 'height': 320, 'style': CaptionStyle(position=7),
@@ -86,3 +88,4 @@ class FilmAudioTests(unittest.TestCase):
             self.assertGreater(r, b + 100)
             r, _, b = center_pixel(36)
             self.assertGreater(b, r + 100)
+

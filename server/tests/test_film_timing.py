@@ -52,7 +52,8 @@ class FilmTimingTests(unittest.TestCase):
             subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=blue:s=80x60:r=30:d=1.5", "-c:v", "libx264", str(source)], check=True)
             subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "sine=duration=0.5", "-c:a", "libmp3lame", str(voice)], check=True)
             clip = {"n": 1, "narration": "Selesai", "title": "Selesai", "shots": [{"start": 0, "end": 1.4}]}
-            project = SimpleNamespace(dir=root, upload_id="id", local_video=source, upload=None, clips=[clip])
+            project = SimpleNamespace(dir=root, upload_id="id", local_video=source, upload=None, clips=[clip],
+                                      clip_asset_path=lambda item, extension: root / f"clip_{item['n']}.{extension}")
             opts = {"width": 180, "height": 320, "style": CaptionStyle(), "brand": None, "brand_position": "bc", "thumb_cfg": {}}
             with patch.object(film.tts, "speak_aligned", return_value=(voice, [Word("Selesai", 0.1, 0.4)])), \
                  patch.object(media, "video_encoders", return_value=[["-c:v", "libx264", "-preset", "ultrafast"]]):
@@ -62,3 +63,4 @@ class FilmTimingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

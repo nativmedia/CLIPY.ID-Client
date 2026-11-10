@@ -10,6 +10,7 @@ from unittest.mock import patch
 from clipy import projects, subtitles
 from clipy.captions import Word
 from fastapi import HTTPException, UploadFile
+from starlette.requests import Request
 from app import create_project
 
 
@@ -113,13 +114,18 @@ class SubtitleModeTests(unittest.IsolatedAsyncioTestCase):
                     'caption': {'font': 'poppins', 'animation': 'pop', 'color': 'yellow', 'case': 'upper'},
                     'thumb': {'source': 'auto', 'title_style': 'bold', 'voice': None}}
         upload = UploadFile(filename='caption.srt', file=io.BytesIO(b'1\n00:00:00,000 --> 00:00:01,000\nHello\n'))
+        request = Request({'type': 'http', 'method': 'POST', 'headers': [],
+                           'client': ('127.0.0.1', 12345), 'scheme': 'http',
+                           'server': ('127.0.0.1', 4748), 'path': '/api/projects', 'query_string': b''})
         with patch('app.keys.load', return_value={'provider': 'deepseek'}):
             with self.assertRaises(HTTPException) as error:
-                await create_project(settings=json.dumps(settings), url='https://youtu.be/abcdefghijk',
-                                     upload_id='', title='', reuse='', image=None, logo=None, subtitle=upload, music=None, music_url='')
+                await create_project(request=request, settings=json.dumps(settings), url='https://youtu.be/abcdefghijk',
+                                     upload_id='', title='', reuse='', image=None, logo=None, subtitle=upload, music=None,
+                                     music_url='', export_dir='')
         self.assertEqual(error.exception.status_code, 400)
         self.assertIn('filming', error.exception.detail)
 
 
 if __name__ == '__main__':
     unittest.main()
+

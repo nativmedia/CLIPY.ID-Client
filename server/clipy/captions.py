@@ -194,6 +194,32 @@ def chunk_words(words: list[Word], max_words: int = 3, max_chars: int = 15, *, s
     return chunks
 
 
+def expand_coarse_words(words: list[Word]) -> list[Word]:
+    """Split cue-level subtitle timing into readable, approximately timed words.
+
+    YouTube's fallback captions sometimes provide a whole spoken passage as one
+    ``Word``.  Caption rendering, clipping, and framing all need word-sized
+    entries, so distribute that cue's duration by token length.  Real
+    word-timed transcripts contain one token per entry and pass through
+    unchanged.
+    """
+    expanded: list[Word] = []
+    for word in words:
+        tokens = word.text.split()
+        if len(tokens) < 2 or word.end <= word.start:
+            expanded.append(word)
+            continue
+        weights = [max(1, len(token)) for token in tokens]
+        total = sum(weights)
+        elapsed = 0
+        for index, (token, weight) in enumerate(zip(tokens, weights)):
+            start = word.start + (word.end - word.start) * elapsed / total
+            elapsed += weight
+            end = word.end if index == len(tokens) - 1 else word.start + (word.end - word.start) * elapsed / total
+            expanded.append(Word(token, start, end))
+    return expanded
+
+
 def apply_case(text: str, case: str, first_in_sentence: bool) -> str:
     if case == "upper":
         return text.upper()
@@ -250,6 +276,7 @@ class CaptionCue:
 
 def _caption_cues(words: list[Word], style: CaptionStyle, width: int, height: int) -> list[CaptionCue]:
     """Wrap once using the actual font, then keep those same lines for every highlight."""
+    words = expand_coarse_words(words)
     layout = layout_for(width, height)
     single = style.display == "word" or (style.display is None and style.animation == "word")
     sentence = style.display == "sentence"

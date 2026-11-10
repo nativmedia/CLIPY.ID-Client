@@ -101,6 +101,16 @@ class YouTubeTranscriptTests(unittest.TestCase):
         self.assertEqual((clips[0].start, clips[0].end), (20, 50))
         self.assertTrue(notices)
 
+    def test_coarse_segment_supplies_clamped_words_to_a_clip(self):
+        words = [Word('Satu segmen panjang tetap harus memiliki caption pada clip ini.', 0, 20)]
+
+        local = projects._local_words(words, 5, 10)
+
+        self.assertGreater(len(local), 1)
+        self.assertEqual(local[0].start, 0)
+        self.assertEqual(local[-1].end, 5)
+        self.assertTrue(all(0 <= word.start < word.end <= 5 for word in local))
+
     def test_gpu_failure_falls_back_to_cpu_with_reason(self):
         status = []
         with patch.object(transcribe, 'device', return_value='cuda'), \
@@ -146,3 +156,4 @@ GPU2:
 
 if __name__ == '__main__':
     unittest.main()
+
