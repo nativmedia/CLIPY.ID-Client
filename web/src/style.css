@@ -592,6 +592,8 @@ body.locked { overflow: hidden; }
 .font-pick [data-font="cambria"] { font-family: Cambria, Georgia, serif; }
 .font-pick [data-font="ink-free"] { font-family: "Ink Free", "Segoe Print", cursive; }
 .font-pick .option-preview { font-size: 15px; }
+/* The menu compares families, not their display treatment: every sample stays regular. */
+.font-pick .option-list .option-preview { font-family: var(--mono) !important; font-weight: 400; font-style: normal; }
 .font-pick .option-list,
 .preview-pick:has(#opt-brand-style) .option-list {
   grid-template-columns: minmax(0, 1fr);
