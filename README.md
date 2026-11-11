@@ -47,7 +47,7 @@ npm run dev:desktop
 
 Di PowerShell Windows, gunakan `npm.cmd` jika perintah `npm` diblokir oleh kebijakan skrip.
 
-**npm run setup** menyiapkan lingkungan Python lokal dan dua model crop. Setelah itu cukup gunakan **npm run dev:desktop** untuk membuka aplikasi lagi. Selesaikan pekerjaan video yang sedang berjalan sebelum menutup jendela.
+**npm run setup** menyiapkan lingkungan Python lokal dan model untuk crop serta deteksi tawa. Setelah itu cukup gunakan **npm run dev:desktop** untuk membuka aplikasi lagi. Selesaikan pekerjaan video yang sedang berjalan sebelum menutup jendela.
 
 ## Prasyarat
 
@@ -90,6 +90,6 @@ git pull --ff-only
 npm run dev:desktop
 ```
 
-Jika dependensi ikut berubah, jalankan `npm ci` dan `npm run setup` setelah `git pull`, lalu buka aplikasi. Jika memakai perintah instalasi satu baris di atas, jalankan ulang perintah tersebut untuk mengambil pembaruan dan menyiapkan dependensi.
+Jika dependensi ikut berubah, jalankan `npm ci` dan `npm run setup` setelah `git pull`, lalu buka aplikasi. Jalankan ulang `npm run setup` untuk menambahkan model deteksi tawa pada instalasi lama. Jika memakai perintah instalasi satu baris di atas, jalankan ulang perintah tersebut untuk mengambil pembaruan dan menyiapkan dependensi.
 
 [Panduan mode web, pengaturan, dan pemecahan masalah](docs/web.md)

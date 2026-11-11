@@ -31,6 +31,11 @@ const models = [
     "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx",
     "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
   ],
+  [
+    "yamnet.tflite",
+    "https://storage.googleapis.com/mediapipe-models/audio_classifier/yamnet/float32/1/yamnet.tflite",
+    "4d8b4a53282dc83ef04e3e7dbc4fbc98082e34e44ed798e16c3a0cdd4c584faf",
+  ],
 ];
 
 function probe(command, args) {
@@ -115,7 +120,7 @@ try {
 
   console.log("\n[2/3] Memasang dependensi Python");
   run(python, ["-m", "pip", "install", "--disable-pip-version-check", "--prefer-binary", "-r", "requirements.txt"]);
-  console.log("\n[3/3] Menyiapkan model crop");
+  console.log("\n[3/3] Menyiapkan model crop dan deteksi tawa");
   for (const model of models) await installModel(...model);
   console.log("Dependensi CLIPY.ID siap.");
 } catch (error) {

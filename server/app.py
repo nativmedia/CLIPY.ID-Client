@@ -57,15 +57,16 @@ app = FastAPI(title="CLIPY.ID", lifespan=lifespan)
 
 COUNTS = list(range(1, 11))
 DURATIONS = [15, 30, 45, 60, 90, 120]
+CLIP_RATIO_PATTERN = r"^(auto|none|blackbar|" + "|".join(map(re.escape, media.RATIOS)) + r")$"
+BACKGROUND_PATTERN = r"^(none|blur|black|white)$"
 
 
 class ClipSettings(BaseModel):
     ratio: str = Field(pattern="^(" + "|".join(re.escape(r) for r in media.RATIOS) + ")$")
     fit: str = Field(pattern="^(crop|fit)$")
-    # New clips fill the chosen output ratio through the stable subject-framing pipeline.
-    # Already-saved projects can still omit this field and retain their old behavior.
-    clip_ratio: str = Field(default="auto", pattern=r"^(auto|none|blackbar|1:1|3:4|4:5|5:4|9:16|16:9)$")
-    background: str = Field(default="black", pattern=r"^(blur|black|white)$")
+    clip_ratio: str = Field(default="auto", pattern=CLIP_RATIO_PATTERN)
+    background: str = Field(default="black", pattern=BACKGROUND_PATTERN)
+    background_inset: bool = False
     count: int = Field(ge=1, le=10)
     max_duration: int = Field(ge=10, le=180)
     dubbing_speed: float = Field(default=1.0, ge=1, le=2)
@@ -116,8 +117,8 @@ class FilmSettings(BaseModel):
     additional_prompt: str = Field(default="", max_length=2000)
     voice: str = "id-ID-GadisNeural"
     source_type: str = Field(default="film", pattern="^(film|recap)$")
-    source_ratio: str = Field(default="auto", pattern=r"^(auto|none|blackbar|1:1|3:4|4:5|5:4|9:16|16:9)$")
-    background: str = Field(default="black", pattern="^(blur|black|white)$")
+    source_ratio: str = Field(default="auto", pattern=CLIP_RATIO_PATTERN)
+    background: str = Field(default="black", pattern=BACKGROUND_PATTERN)
 
 
 class Settings(BaseModel):
@@ -232,7 +233,7 @@ def delete_key():
 @app.get("/api/options")
 def options():
     return {
-        "ratios": [ratio for ratio in media.RATIOS if ratio != "5:4"],
+        "ratios": [ratio for ratio in media.RATIOS if ratio not in ("5:4", "3:4")],
         "fits": media.FITS,
         "counts": COUNTS,
         "durations": DURATIONS,

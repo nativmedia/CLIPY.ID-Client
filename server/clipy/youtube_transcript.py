@@ -10,15 +10,34 @@ from urllib.parse import urlsplit
 
 import yt_dlp
 from .captions import Word
+from .laughter import BRACKETED_CUE, is_laughter_cue, normalize_cues
 
 MAX_BYTES = 8 * 1024 * 1024
 
 
-BRACKETED_CUE = re.compile(r"\[[^\[\]]*\]")
-
-
-def _without_cues(text: str) -> str:
-    return BRACKETED_CUE.sub(lambda match: " " * len(match[0]), text)
+def _caption_segments(segs: list[dict]) -> list[dict]:
+    parts = [str(seg.get('utf8', '')) for seg in segs]
+    text = ''.join(parts)
+    cleaned = BRACKETED_CUE.sub(lambda match: ' ' * len(match[0]), text)
+    laughter = iter(match for match in BRACKETED_CUE.finditer(text) if is_laughter_cue(match[0]))
+    marker = next(laughter, None)
+    offset = 0
+    nonempty = []
+    for seg, part in zip(segs, parts):
+        end = offset + len(part)
+        cursor = offset
+        fragments = []
+        # Attach a split annotation to the segment where its opening bracket starts.
+        while marker is not None and marker.start() < end:
+            fragments.extend((cleaned[cursor:marker.start()], ' ' + marker[0] + ' '))
+            cursor = marker.end()
+            marker = next(laughter, None)
+        fragments.append(cleaned[cursor:end])
+        visible = ''.join(fragments)
+        if visible.strip():
+            nonempty.append({**seg, 'utf8': visible})
+        offset = end
+    return nonempty
 
 
 def _token_key(token: str) -> str:
@@ -58,7 +77,7 @@ def _merge_cues(cues: list[Word], duration: float) -> list[Word]:
             end = duration
         if end <= start or not cue.text.strip():
             continue
-        text = re.sub(r'\s+', ' ', _without_cues(cue.text)).strip()
+        text = normalize_cues(cue.text, end - start)
         if not text:
             continue
         tokens = text.split()
@@ -126,15 +145,7 @@ def parse_json3(data: bytes, duration: float) -> tuple[list[Word], str]:
     word_timing = True
     for event in events:
         segs = event.get('segs') or []
-        segment_texts = [str(seg.get('utf8', '')) for seg in segs]
-        cleaned = _without_cues(''.join(segment_texts))
-        nonempty = []
-        offset = 0
-        for seg, text in zip(segs, segment_texts):
-            part = cleaned[offset:offset + len(text)]
-            offset += len(text)
-            if part.strip():
-                nonempty.append({**seg, 'utf8': part})
+        nonempty = _caption_segments(segs)
         if not nonempty:
             continue
         try:
@@ -151,7 +162,8 @@ def parse_json3(data: bytes, duration: float) -> tuple[list[Word], str]:
         for index, seg in enumerate(nonempty):
             text = re.sub(r'\s+', ' ', str(seg.get('utf8', '')).strip())
             cjk_chars = len(re.findall(r'[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]', text))
-            if len(text.split()) != 1 or len(text) > 64 or cjk_chars > 1 or (index and 'tOffsetMs' not in seg):
+            if ((len(text.split()) != 1 or len(text) > 64 or cjk_chars > 1) and not is_laughter_cue(text)
+                    or (index and 'tOffsetMs' not in seg)):
                 word_timing = False
                 continue
             try:
@@ -174,7 +186,7 @@ def parse_json3(data: bytes, duration: float) -> tuple[list[Word], str]:
             end = min(end, starts[i + 1][0])
         if end <= start:
             return _merge_cues(cues, duration), 'segmen'
-        words.append(Word(text, start, end))
+        words.append(Word(normalize_cues(text, end - start), start, end))
     return words, 'kata'
 
 

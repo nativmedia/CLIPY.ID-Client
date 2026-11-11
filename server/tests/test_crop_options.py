@@ -41,11 +41,14 @@ class CropOptionsTests(unittest.TestCase):
         self.assertEqual(parser.options['film-ratio'], RATIOS)
         self.assertNotIn('film-source-ratio', html)
         self.assertNotIn('opt-clip-ratio', html)
-        self.assertEqual(parser.options['film-background'], ['black', 'white', 'blur'])
-        self.assertEqual(parser.options['opt-background'], ['black', 'white', 'blur'])
-        self.assertEqual(list(media.RATIOS), [*RATIOS, '5:4'])
-        for ratio in [*RATIOS, '5:4']:
-            self.assertEqual(ClipSettings(ratio=ratio, fit='crop', count=1, max_duration=60).ratio, ratio)
+        self.assertEqual(parser.options['film-background'], ['none', 'black', 'white', 'blur'])
+        self.assertEqual(parser.options['opt-background'], ['none', 'black', 'white', 'blur'])
+        self.assertEqual(list(media.RATIOS), [*RATIOS, '5:4', '3:4'])
+        for ratio in [*RATIOS, '5:4', '3:4']:
+            clip = ClipSettings(ratio=ratio, fit='crop', count=1, max_duration=60, clip_ratio=ratio, background='none')
+            self.assertEqual((clip.ratio, clip.clip_ratio, clip.background), (ratio, ratio, 'none'))
+            film_settings = FilmSettings(source_ratio=ratio, background='none')
+            self.assertEqual((film_settings.source_ratio, film_settings.background), (ratio, 'none'))
         for mode in ('none', 'blackbar', 'auto', '3:4'):
             self.assertEqual(FilmSettings(source_ratio=mode).source_ratio, mode)
             if 'clip_ratio' in ClipSettings.model_fields:

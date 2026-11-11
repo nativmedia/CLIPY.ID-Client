@@ -27,6 +27,7 @@ RATIOS = {
     "4:5": (1080, 1350),
     "9:16": (1080, 1920),
     "5:4": (1350, 1080),  # Previously saved projects.
+    "3:4": (1080, 1440),  # Previously saved clip shapes.
 }
 FITS = {"crop": "Crop to fill", "fit": "Fit (blurred background)"}
 
@@ -430,21 +431,20 @@ def clip_frame_size(width: int, clip_ratio: str, source_ratio: float, *, output_
     return width, max(2, round(width / ratio / 2) * 2)
 
 
-def composed_reframe(width: int, height: int, clip_ratio: str, background: str,
-                     source_ratio: float, plan=None, offset: float = 0.0,
-                     still_at: float | None = None) -> str:
-    """Reframe to the clip shape and place it on an output-width canvas."""
+def compose_canvas(graph: str, width: int, height: int, fg_width: int, fg_height: int,
+                   background: str, *, inset: bool = False) -> str:
+    if background == "none":
+        return graph
     if background not in ("blur", "black", "white"):
         raise ValueError("Unknown background")
-    fg_width, fg_height = clip_frame_size(width, clip_ratio, source_ratio, output_height=height)
-    # No crop preserves the whole source, including portrait sources on wide canvases.
-    if clip_ratio in ("none", "blackbar") and fg_height > height:
-        fg_height = height
-        fg_width = max(2, min(width, round(height * source_ratio / 2) * 2))
-    graph = reframe(fg_width, fg_height, "crop", plan, offset, still_at)
     if fg_width == width and fg_height == height:
-        return graph
-    graph = graph.replace("[r]", "[framed]")
+        if not inset:
+            return graph
+        # A same-ratio clip leaves a visible border at 90% scale.
+        inner_width, inner_height = (round(size * .9 / 2) * 2 for size in (width, height))
+        graph += f";[r]scale={inner_width}:{inner_height}:flags=lanczos[framed]"
+    else:
+        graph = graph.replace("[r]", "[framed]")
     if fg_height > height:
         return graph + f";[framed]crop={width}:{height},setsar=1[r]"
     if background == "blur":
@@ -453,6 +453,20 @@ def composed_reframe(width: int, height: int, clip_ratio: str, background: str,
                 f"crop={width}:{height},boxblur=24:2,eq=brightness=-0.12[compbg];"
                 "[compbg][compfg]overlay=(W-w)/2:(H-h)/2,setsar=1[r]")
     return graph + f";[framed]pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={background},setsar=1[r]"
+
+
+def composed_reframe(width: int, height: int, clip_ratio: str, background: str,
+                     source_ratio: float, plan=None, offset: float = 0.0,
+                     still_at: float | None = None, *, inset: bool = False) -> str:
+    """Reframe the clip and place it on the export canvas."""
+    crop_ratio = "auto" if background == "none" else clip_ratio
+    fg_width, fg_height = clip_frame_size(width, crop_ratio, source_ratio, output_height=height)
+    # Keep the whole source for saved no-crop and black-bar modes.
+    if crop_ratio in ("none", "blackbar") and fg_height > height:
+        fg_height = height
+        fg_width = max(2, min(width, round(height * source_ratio / 2) * 2))
+    graph = reframe(fg_width, fg_height, "crop", plan, offset, still_at)
+    return compose_canvas(graph, width, height, fg_width, fg_height, background, inset=inset)
 
 
 def _run_ffmpeg(args: list[str], cwd: Path, duration: float, on_progress=None) -> None:
@@ -506,7 +520,7 @@ TITLE_SECONDS = 3.0
 def render_clip(source: Path, ass: Path, out: Path, width: int, height: int, fit: str, on_progress=None,
                 brand: Path | None = None, brand_position: str = "bc", plan=None,
                 title: Path | None = None, *, clip_ratio: str | None = None,
-                background: str = "black", source_ratio: float | None = None) -> Path:
+                background: str = "black", source_ratio: float | None = None, background_inset: bool = False) -> Path:
     """
     Reframe the clip (on the speaker when there's a plan), burn in the captions, stamp the
     branding mark (already built at its final size and opacity, see thumbs.build_brand), and
@@ -527,7 +541,8 @@ def render_clip(source: Path, ass: Path, out: Path, width: int, height: int, fit
         from .captions import for_stacked_panels
         render_ass = work / f"{ass.stem}.stacked.ass"
         render_ass.write_text(for_stacked_panels(ass.read_text(encoding="utf-8"), height), encoding="utf-8")
-    graph = (composed_reframe(width, height, clip_ratio, background, source_ratio, plan, offset if plan else 0.0)
+    graph = (composed_reframe(width, height, clip_ratio, background, source_ratio, plan,
+                              offset if plan else 0.0, inset=background_inset)
              if clip_ratio is not None and source_ratio is not None
              else reframe(width, height, fit, plan, offset if plan else 0.0))
     graph += f";[r]ass={render_ass.name}:fontsdir={fonts}[c0]"
@@ -604,12 +619,14 @@ def mix_music(video: Path, music: Path, out: Path, start: float = 0, length: flo
 
 
 def grab_frame(source: Path, out: Path, width: int, height: int, fit: str, plan=None, *,
-               clip_ratio: str | None = None, background: str = "black", source_ratio: float | None = None) -> Path:
+               clip_ratio: str | None = None, background: str = "black", source_ratio: float | None = None,
+               background_inset: bool = False) -> Path:
     """A representative frame of the clip, reframed like the short (no captions), for the thumbnail."""
     duration = probe_duration(source)
     # Skip the very first moments, which are often mid-cut.
     seek = min(1.5, duration / 4)
-    graph = (composed_reframe(width, height, clip_ratio, background, source_ratio, plan, still_at=seek)
+    graph = (composed_reframe(width, height, clip_ratio, background, source_ratio, plan,
+                              still_at=seek, inset=background_inset)
              if clip_ratio is not None and source_ratio is not None
              else reframe(width, height, fit, plan, still_at=seek)) + ";[r]thumbnail=30[v]"
     subprocess.run(

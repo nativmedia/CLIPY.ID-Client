@@ -6,7 +6,7 @@ from unittest.mock import patch
 from PIL import Image
 from clipy import captions
 from app import ClipSettings
-from clipy import media
+from clipy import film, media
 from clipy.framing import Plan, Segment
 
 class ClipLayoutTests(unittest.TestCase):
@@ -30,6 +30,21 @@ class ClipLayoutTests(unittest.TestCase):
                 else:
                     self.assertGreater(top[0], 100)
                     self.assertLess(top[0], center[0])
+
+    def test_same_ratio_inset_and_no_background_in_both_renderers(self):
+        for graph in (
+            media.composed_reframe(180, 320, '9:16', 'white', 16 / 9, inset=True),
+            film._filming_graph(16 / 9, 180, 320, 'white', '9:16', inset=True),
+        ):
+            self.assertIn('scale=162:288', graph)
+            self.assertIn('pad=180:320', graph)
+        for graph in (
+            media.composed_reframe(240, 180, '4:3', 'none', 16 / 9),
+            film._filming_graph(16 / 9, 240, 180, 'none', '4:3'),
+        ):
+            self.assertIn('crop=240:180', graph)
+            self.assertNotIn('pad=', graph)
+            self.assertNotIn('boxblur=', graph)
 
     def test_video_and_thumbnail_use_same_clip_layout(self):
         with tempfile.TemporaryDirectory() as tmp:

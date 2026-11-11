@@ -14,11 +14,12 @@ python -m venv .venv
 Needs `ffmpeg`/`ffprobe` (with libass) on PATH. The first transcription downloads the
 Whisper model (~3 GB for `large-v3`) into the Hugging Face cache.
 
-Speaker framing needs two small models in `models/`:
+From the repo root, run `npm run setup` to download the framing and laughter models. To download them manually into `models/`, run the following commands.
 
 ```bash
 curl -L -o models/face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
 curl -L -o models/face_detection_yunet_2023mar.onnx https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+curl -L -o models/yamnet.tflite https://storage.googleapis.com/mediapipe-models/audio_classifier/yamnet/float32/1/yamnet.tflite
 ```
 
 ## Speaker framing (crop mode)

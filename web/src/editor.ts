@@ -37,7 +37,7 @@ export type Project = {
     objective?: string;
     music_start?: number;
     music_length?: number | null;
-    clip: { ratio: string; fit: string; count: number; max_duration: number; dubbing_speed?: number; clip_ratio?: string | null; background?: string | null };
+    clip: { ratio: string; fit: string; count: number; max_duration: number; dubbing_speed?: number; clip_ratio?: string | null; background?: string | null; background_inset?: boolean };
     caption: { font: string; animation: string; color: string; case: string; position?: number | null; display?: string | null; font_weight?: string; max_lines?: number };
     thumb: { source: string; title_style: string; text?: string; text_mode?: "auto" | "manual" | "none"; numbered?: boolean; sequence?: string | null; position?: string | null; voice: string | null };
     brand?: { position: string; text?: string; style?: string; opacity?: number };
@@ -55,8 +55,15 @@ export function clipLayout(settings: Project["settings"]): string {
   const film = settings.mode === "filming" ? settings.film : null;
   const crop = film?.source_ratio ?? settings.clip.clip_ratio;
   const background = film?.background ?? settings.clip.background;
-  if (crop != null) return `${settings.clip.ratio} · ${crop === "auto" ? "auto (output ratio)" : crop === "none" ? "no crop" : crop} · ${background ?? "black"}`;
-  return `${settings.clip.ratio} ${settings.clip.fit === "crop" ? "crop" : "no crop"}`;
+  const ratio = settings.clip.ratio;
+  if (background === "none") return `${ratio} · no background`;
+  if (crop == null) return `${ratio} ${settings.clip.fit === "crop" ? "crop" : "no crop"}`;
+  const color = background === "white" ? "putih" : background === "blur" ? "blur" : "hitam";
+  if (crop === "auto" || crop === ratio) {
+    const label = color === "hitam" && !settings.clip.background_inset ? "no background" : color;
+    return `${ratio} · ${label}`;
+  }
+  return `${crop === "none" ? "no crop" : crop} · hasil ${ratio} · ${color}`;
 }
 
 type LengthName = "pendek" | "sedang" | "panjang";

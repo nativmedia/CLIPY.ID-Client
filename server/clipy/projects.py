@@ -29,7 +29,7 @@ from pathlib import Path
 from urllib.parse import quote
 import re
 
-from . import captions, framing, media, select, social, thumbs, tts, uploads
+from . import captions, framing, laughter, media, select, social, thumbs, tts, uploads
 from .captions import CaptionStyle, Word
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "projects"
@@ -416,6 +416,7 @@ def _clip_options(p: Project):
         "fit": clip_cfg["fit"],
         "clip_ratio": clip_cfg.get("clip_ratio"),
         "background": clip_cfg.get("background") or "black",
+        "background_inset": clip_cfg.get("background_inset", False),
         "style": CaptionStyle(**p.settings["caption"]),
         "thumb_cfg": p.settings["thumb"],
         "dubbing_speed": clip_cfg.get("dubbing_speed", 1.0),
@@ -644,7 +645,9 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
         else:
             src = media.download_section(p.url, clip["start"], clip["end"], src, fetched)
 
-    clip_ratio = opts.get("clip_ratio")
+    background = opts.get("background", "black")
+    background_inset = opts.get("background_inset", False)
+    clip_ratio = "auto" if background == "none" else opts.get("clip_ratio")
     inset = media.crop_insets(src, clip_ratio)
     has_inset = any(inset) if isinstance(inset, tuple) else bool(inset)
     if has_inset:
@@ -654,14 +657,14 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
         src = clean
 
     local = _local_words(words, clip["start"], clip["end"])
+    caption_words = laughter.caption_words(src, local, clip["end"] - clip["start"])
     ass = p.clip_asset_path(clip, "ass")
     srt = p.clip_asset_path(clip, "srt")
-    ass.write_text(captions.build_ass(local, opts["style"], width, height), encoding="utf-8")
-    srt.write_text(captions.build_srt(local, opts["style"], width, height), encoding="utf-8")
+    ass.write_text(captions.build_ass(caption_words, opts["style"], width, height), encoding="utf-8")
+    srt.write_text(captions.build_srt(caption_words, opts["style"], width, height), encoding="utf-8")
     clip["srt"], clip["ass"] = srt.name, ass.name
 
     source_ratio = film._source_ratio(src) if clip_ratio is not None else None
-    background = opts.get("background", "black")
     plan = None
     if fit == "crop" and clip_ratio not in ("none", "blackbar"):
         clip["status"] = "framing"
@@ -681,7 +684,8 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
     title = None if voice else thumbs.title_overlay(d / f"title_{n}.png", width, height, clip["title"], thumb_cfg.get("title_style", "bold"))
     media.render_clip(src, ass, body, width, height, fit, _span(p, base + share * 0.4, base + share * 0.85),
                       opts["brand"], opts["brand_position"], plan, title,
-                      clip_ratio=clip_ratio, background=background, source_ratio=source_ratio)
+                      clip_ratio=clip_ratio, background=background, source_ratio=source_ratio,
+                      background_inset=background_inset)
 
     clip["status"] = "thumbnail"
     frame = d / f"frame_{n}.jpg"
@@ -689,7 +693,7 @@ def _make_clip(p: Project, clip: dict, words: list[Word], opts: dict, base: floa
         thumbs.prepare(d / p.upload, frame, width, height)
     else:
         media.grab_frame(src, frame, width, height, fit, plan, clip_ratio=clip_ratio,
-                         background=background, source_ratio=source_ratio)
+                         background=background, source_ratio=source_ratio, background_inset=background_inset)
     thumb = d / f"thumb_{n}.jpg"
     title_text = thumbs.thumbnail_text(thumb_cfg, clip, " ".join(w.text for w in local))
     thumbs.add_title(frame, thumb, clip["title"], "none" if thumb_cfg.get("text_mode") == "none" else thumb_cfg.get("title_style", "bold"), custom_text=title_text,

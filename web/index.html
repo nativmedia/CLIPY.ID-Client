@@ -126,8 +126,8 @@
           <div class="step-inner">
             <p class="kicker"><span>filming</span></p>
             <div class="row cols-4">
-              <label class="pick"><select id="film-ratio" required><option value="16:9">16:9</option><option value="4:3">4:3</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="9:16" selected>9:16</option></select><span>output ratio</span></label>
-              <label class="pick" id="film-background-pick"><select id="film-background" required><option value="black">no background</option><option value="white">putih</option><option value="blur">blur</option></select><span>background</span></label>
+              <label class="pick"><select id="film-ratio" required><option value="16:9">16:9</option><option value="4:3">4:3</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="9:16" selected>9:16</option></select><span>ratio clip</span></label>
+              <label class="pick" id="film-background-pick"><select id="film-background" required><option value="none">no background</option><option value="black">hitam</option><option value="white">putih</option><option value="blur">blur</option></select><span>background</span></label>
               <label class="pick"><select id="film-duration" required><option value="60">≤ 60 detik</option><option value="90">≤ 90 detik</option><option value="120">≤ 120 detik</option><option value="180">≤ 180 detik</option></select><span>duration</span></label>
               <div class="pick episode-pick">
                 <input class="text-pick" id="film-episodes" aria-labelledby="film-episodes-label" required type="number" min="1" max="10" value="4" />
@@ -162,8 +162,8 @@
           <div class="step-inner">
             <p class="kicker"><span>clip</span></p>
             <div class="row cols-4">
-              <label class="pick"><select id="opt-ratio" required></select><span>output ratio</span></label>
-              <label class="pick"><select id="opt-background" required><option value="black">no background</option><option value="white">putih</option><option value="blur">blur</option></select><span>background</span></label>
+              <label class="pick"><select id="opt-ratio" required></select><span>ratio clip</span></label>
+              <label class="pick"><select id="opt-background" required><option value="none">no background</option><option value="black">hitam</option><option value="white">putih</option><option value="blur">blur</option></select><span>background</span></label>
               <label class="pick"><select id="opt-duration" required></select><span>duration</span></label>
               <label class="pick"><select id="opt-count" required></select><span>output clips</span></label>
             </div>
@@ -184,7 +184,7 @@
               <label class="pick" id="caption-lines-pick"><select id="opt-caption-lines" required><option value="1">1 baris</option><option value="2" selected>2 baris</option><option value="3">3 baris</option></select><span>maksimal baris</span></label>
               <label class="pick"><select id="opt-caption-position" required><option value="1">paling atas</option><option value="2">atas</option><option value="3">atas tengah</option><option value="4">tengah</option><option value="5">bawah tengah</option><option value="6" selected>bawah</option><option value="7">paling bawah</option></select><span>posisi caption</span></label>
               <div class="pick"><select id="opt-font" required></select><span>font</span></div>
-              <div class="pick"><select id="opt-caption-weight" required><option value="thin">Thin</option><option value="regular" selected>Regular</option><option value="bold">Bold</option><option value="extra-bold">Extra Bold</option></select><span>font weight</span></div>
+              <div class="pick"><select id="opt-caption-weight" required><option value="thin">Thin</option><option value="regular">Regular</option><option value="bold" selected>Bold</option><option value="extra-bold">Extra Bold</option></select><span>font weight</span></div>
               <label class="pick"><select id="opt-case" required></select><span>letter case</span></label>
               <div class="pick"><div class="swatches" id="opt-color" role="radiogroup" aria-required="true" aria-label="color"></div><span>color</span></div>
             </div>
@@ -271,7 +271,7 @@
         <video id="modal-video" playsinline controls></video>
         <p class="modal-title" id="modal-title"></p>
         <div class="modal-actions">
-          <button type="button" class="text-button" id="modal-edit">open in editor</button>
+          <button type="button" class="text-button" id="modal-edit">open project</button>
         </div>
       </div>
     </div>

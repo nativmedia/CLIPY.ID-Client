@@ -63,6 +63,25 @@ class YouTubeTranscriptTests(unittest.TestCase):
         words, precision = youtube_transcript.parse_cues(data, 10)
         self.assertEqual((precision, words[0].text, words[0].start, words[0].end), ('segmen', 'Hello world.', 1, 3))
 
+    def test_split_laughter_cue_keeps_its_timing_and_other_cues_are_removed(self):
+        data = payload([{'tStartMs': 1000, 'dDurationMs': 1800, 'segs': [
+            {'utf8': 'Halo'}, {'utf8': ' [penonton', 'tOffsetMs': 350},
+            {'utf8': ' tertawa]', 'tOffsetMs': 400}, {'utf8': ' [Musik]', 'tOffsetMs': 900},
+            {'utf8': ' lanjut', 'tOffsetMs': 1250}]}])
+        words, precision = youtube_transcript.parse_json3(data, 10)
+        self.assertEqual(precision, 'kata')
+        self.assertEqual([(word.text, word.start, word.end) for word in words],
+                         [('Halo', 1, 1.35), ('hahaha', 1.35, 2.25), ('lanjut', 2.25, 2.8)])
+
+    def test_subtitle_laughter_uses_cue_duration(self):
+        data = (b'WEBVTT\n\n00:00:01.000 --> 00:00:01.600\n[giggles]\n\n'
+                b'00:00:02.000 --> 00:00:03.400\n[tertawa]\n\n'
+                b'00:00:04.000 --> 00:00:05.000\n[Applause]\n')
+        words, precision = youtube_transcript.parse_cues(data, 10)
+        self.assertEqual(precision, 'segmen')
+        self.assertEqual([(word.text, word.start, word.end) for word in words],
+                         [('hehe', 1, 1.6), ('hahahaha', 2, 3.4)])
+
     def test_manual_track_precedes_automatic(self):
         data = payload([{'tStartMs': 1000, 'dDurationMs': 1000, 'segs': [{'utf8': 'Halo dunia.'}]}])
         response = MagicMock(); response.__enter__.return_value = io.BytesIO(data)

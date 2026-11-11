@@ -304,7 +304,7 @@ def _source_ratio(path):
     return width / height
 
 
-def _filming_graph(source_ratio, width, height, background, clip_ratio="auto", letterbox=0):
+def _filming_graph(source_ratio, width, height, background, clip_ratio="auto", letterbox=0, *, inset=False):
     """Center-crop to the chosen clip shape, then fit it inside the output canvas."""
     if isinstance(letterbox, tuple):
         x_inset, y_inset = letterbox
@@ -313,24 +313,15 @@ def _filming_graph(source_ratio, width, height, background, clip_ratio="auto", l
     else:
         active_ratio = source_ratio / (1 - 2 * letterbox / 360)
         source_crop = f"{media.letterbox_crop(letterbox)}," if letterbox else ""
-    ratio = width / height if clip_ratio == "auto" else active_ratio if clip_ratio in ("none", "blackbar") else int(clip_ratio.split(":")[0]) / int(clip_ratio.split(":")[1])
-    fg_width, fg_height = width, max(2, round(width / ratio / 2) * 2)
-    if clip_ratio in ("none", "blackbar") and fg_height > height:
+    crop_ratio = "auto" if background == "none" else clip_ratio
+    fg_width, fg_height = media.clip_frame_size(width, crop_ratio, active_ratio, output_height=height)
+    if crop_ratio in ("none", "blackbar") and fg_height > height:
         fg_height = height
-        fg_width = max(2, min(width, round(height * ratio / 2) * 2))
+        fg_width = max(2, min(width, round(height * active_ratio / 2) * 2))
     crop = (f"[0:v]{source_crop}scale=trunc(iw*sar/2)*2:ih,setsar=1,"
             f"scale={fg_width}:{fg_height}:force_original_aspect_ratio=increase,"
-            f"crop={fg_width}:{fg_height},setsar=1")
-    if fg_width == width and fg_height >= height:
-        return crop + f",crop={width}:{height},setsar=1[r]"
-    if background == "blur":
-        return (crop + "[clip];[clip]split=2[bgsrc][fg];"
-                f"[bgsrc]scale={width}:{height}:force_original_aspect_ratio=increase,"
-                f"crop={width}:{height},boxblur=24:2,eq=brightness=-0.12[bg];"
-                "[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[r]")
-    if background not in ("black", "white"):
-        raise ValueError("Unknown filming background")
-    return crop + f",pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={background},setsar=1[r]"
+            f"crop={fg_width}:{fg_height},setsar=1[r]")
+    return media.compose_canvas(crop, width, height, fg_width, fg_height, background, inset=inset)
 
 
 def _narration_cuts(shots, spoken, source_words):
@@ -610,7 +601,7 @@ def render(p, clip, opts, config):
         else:
             inset = local_inset or media.crop_insets(src, crop_mode)
         graph = _filming_graph(ratio, width, height, config.get("background", "black"),
-                               config.get("source_ratio", "auto"), inset)
+                               crop_mode, inset, inset=opts.get("background_inset", False))
         graph += (f";[r]setpts={stretch:.8f}*(PTS-STARTPTS),fps={media.FPS},"
                   f"tpad=stop_mode=clone:stop={frames},trim=end_frame={frames},format=yuv420p[v]")
         # Without verified source separation, drop all original audio so dialogue
